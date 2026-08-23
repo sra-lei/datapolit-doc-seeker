@@ -1,0 +1,26 @@
+main:
+  push:
+    - imports:
+        - https://cnb.cool/sra_lei/datacolit-secret/-/blob/main/ssh-deploy.yml
+      services:
+        - docker
+      stages:
+        - name: 构建镜像
+          script: docker build -t ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:latest .
+        - name: 推送镜像
+          script: docker push ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:latest
+        - name: 部署到轻量服务器
+          script: |
+            mkdir -p ~/.ssh && echo "${SSH_PRIVATE_KEY}" > ~/.ssh/id_rsa && chmod 600 ~/.ssh/id_rsa
+            ssh -o StrictHostKeyChecking=no ubuntu@${SERVER_IP} "
+              mkdir -p /opt/datapolit-docs-seeker
+              docker login docker.cnb.cool -u '$IMAGE_REPO_USERNAME' --password-stdin <<< '$IMAGE_REPO_PASSWORD'
+            "
+            # 将仓库中的 compose 文件同步到服务器，避免服务器上旧配置(服务名不一致)导致 no such service 报错
+            # 注意：首次部署还需手动在 /opt/datapolit-docs-seeker 放置 .env（密钥不进仓库）
+            scp -o StrictHostKeyChecking=no docker-compose.prod.yml ubuntu@${SERVER_IP}:/opt/datapolit-docs-seeker/docker-compose.prod.yml
+            ssh -o StrictHostKeyChecking=no ubuntu@${SERVER_IP} "
+              cd /opt/datapolit-docs-seeker
+              docker compose -f docker-compose.prod.yml pull docs-seeker
+              docker compose -f docker-compose.prod.yml up -d docs-seeker
+            "
