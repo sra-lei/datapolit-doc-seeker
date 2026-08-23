@@ -21,6 +21,6 @@ main:
             scp -o StrictHostKeyChecking=no docker-compose.prod.yml ubuntu@${SERVER_IP}:/opt/datapolit-docs-seeker/docker-compose.prod.yml
             ssh -o StrictHostKeyChecking=no ubuntu@${SERVER_IP} "
               cd /opt/datapolit-docs-seeker
-              docker compose -f docker-compose.prod.yml pull doc-seeker
-              docker compose -f docker-compose.prod.yml up -d doc-seeker
+              docker compose -f docker-compose.prod.yml pull docs-seeker
+              docker compose -f docker-compose.prod.yml up -d docs-seeker
             "
