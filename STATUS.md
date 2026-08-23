@@ -38,6 +38,7 @@
 - Docker 运维基线（P3-7）：非 root 用户（app:1000）、Dockerfile/compose 双份 healthcheck（urllib 调 `/v1/health`）、新增 `.dockerignore`（防 .venv/.uv-cache/.env/tests 进镜像）；注：DSH 沙箱无法连接 docker daemon（named pipe 限制），未实际 build，待真机验证
 - Milvus 监控看板：新增 `GET /v1/milvus/stats`（集合状态/行数/向量维度/索引）；修复 `MilvusStore.count`（改用 `get_collection_stats`，原 count 在 Milvus 2.6 报 "pagination not allowed"）、`describe_index`（pymilvus 3.x 需 index_name，先 list_indexes 枚举）；前端 Dashboard 新增 Milvus 监控面板（与数据库管理同行）。⚠️ 发现库向量维度 1536 vs embedding 1024 不匹配，见 P2-13
 - RAG 使用统计（按用户维度）：中间件埋点（`X-User-ID` + chat/retrieve + 状态码）写 Redis 独立键 `rag:usage:*`（不受语义缓存开关影响，Redis 不可用时静默降级）；新增 `GET /v1/usage/stats`（总次数/成功率/活跃用户/用户 Top）；前端 `docsSeekerFetch` 附带 `X-User-ID`，Dashboard 右侧"数据库配置与统计"替换为 RAG 使用统计面板
+- P2-13 修复：embedding 模型统一为 `text-embedding-v2`（与 doc-kit 入库维度 1536 对齐），dense/summary 检索恢复；语义缓存维度自动重探为 1536（漂移自愈）
 - 静态审查（后台子代理）结论：重构后导入图自洽、无循环导入、无旧扁平模块残留引用、实体迁移全链路一致；严重项均为既有 P1（P1-3 已细化三重故障诊断，见 3.1）
 - 未纳入本次范围（按清单后续修）：P1-1/P1-2 依赖缺失、P1-3 语义缓存 bytes、P1-4 缓存维度、P2 系列等
 - 新发现问题：BM25 结果无 id → /chat 去重坍缩，见 P2-12
@@ -133,7 +134,7 @@ src/docs_seeker/
 | P2-10 | `MilvusStore.search` 异常时静默返回 `[]` | `infra/milvus_store.py:82-84` | 上层无法区分"无结果"与"失败"，chat 拿空上下文仍生成 → 幻觉风险 |
 | P2-11 | 每次 chat 都调 LLM 做查询分解，无缓存/无简单问题短路 | `retrieval/query_decomposer.py`、`application/services/chat_service.py` | 每次问答额外 1 次 LLM 调用 + 延迟 + 成本 |
 | P2-12 | BM25 检索结果无 id（`get_all_documents` 未取 id 字段）→ /chat 按 id 去重时全部以 "" 归并，BM25 命中几乎全部被去重掉 | `retrieval/bm25_retriever.py` + `application/pipelines/rag_pipeline.py` | 问答链路召回受损；重构时保持原行为，修复方向：`get_all_documents` 补 id 或用内容哈希兜底 |
-| P2-13 | 🔴 向量维度不匹配：Milvus 库中向量字段 dim=1536（doc-kit 入库），而 docs-seeker embedder 输出 1024（text-embedding-v4 默认）→ dense/summary 检索向量维度不符，检索失败或结果异常 | `infra/embedding/embedder.py` | 检索质量根因级问题（已实测确认：describe_collection dim=1536 vs embedding len=1024）；修复方向：embedder 调用加 `dimensions=1536`（需实测百炼兼容），或 doc-kit 重新以 1024 维入库 |
+| P2-13 | ~~向量维度不匹配（库 1536 vs embedding 1024）~~ | `config/settings.py`、`.env.example` | ✅ 已解决：根因 doc-kit 用 `text-embedding-v2`（1536 维）入库，docs-seeker 误配 `text-embedding-v4`（1024 维）导致 dense/summary 检索报 `vector dimension mismatch (6144 vs 4096 bytes)`；已将 embedding 模型统一为 `text-embedding-v2`，实测 `/v1/retrieve` 恢复。⚠️ 服务器部署 .env 需同步改 `EMBEDDING_MODEL=text-embedding-v2`；doc-kit 入库侧模型必须同为 v2（本地 doc-kit/.env 现为 v4，重新入库前需改）；长远可统一 v4 + 重建库 |
 
 ### 3.3 🟡 P3 工程化欠账
 

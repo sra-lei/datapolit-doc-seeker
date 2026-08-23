@@ -19,7 +19,9 @@ class Settings(BaseSettings):
     # 阿里百炼 (Embedding)
     dashscope_api_key: str = ""
     dashscope_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    embedding_model: str = "text-embedding-v4"
+    # 默认与 doc-kit 入库模型一致（text-embedding-v2 = 1536 维），
+    # 避免检索向量维度与库中向量不匹配（vector dimension mismatch）
+    embedding_model: str = "text-embedding-v2"
 
     # Milvus
     milvus_uri: str = "http://localhost:19530"
