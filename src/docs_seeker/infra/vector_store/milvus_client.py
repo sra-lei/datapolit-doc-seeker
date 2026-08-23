@@ -127,11 +127,89 @@ class MilvusStore:
         except Exception:
             return False
 
+    def get_server_version(self) -> str:
+        """Milvus 服务版本"""
+        try:
+            return str(self.client.get_server_version())
+        except Exception as e:
+            logger.warning(f"[Milvus] get_server_version 失败: {e}")
+            return ""
+
+    def describe_collection(self, collection_name: str) -> dict:
+        """集合概要：字段列表（含向量字段维度）。
+
+        Returns:
+            {"name": ..., "fields": [{"name", "type", "dim"?, ...}, ...]}；集合不存在/失败返回 {}
+        """
+        try:
+            if not self.client.has_collection(collection_name):
+                return {}
+            info = self.client.describe_collection(collection_name)
+            fields = info.get("fields", []) if isinstance(info, dict) else getattr(info, "fields", [])
+            result: dict = {"name": collection_name, "fields": []}
+            for field in fields or []:
+                fd = field if isinstance(field, dict) else getattr(field, "to_dict", lambda: {})()
+                entry: dict = {
+                    "name": fd.get("name") or "",
+                    "type": str(fd.get("data_type", fd.get("type", ""))),
+                }
+                params = fd.get("params") or {}
+                if isinstance(params, dict) and params.get("dim"):
+                    entry["dim"] = int(params["dim"])
+                result["fields"].append(entry)
+            return result
+        except Exception as e:
+            logger.warning(f"[Milvus] describe_collection {collection_name} 失败: {e}")
+            return {}
+
+    def describe_index(self, collection_name: str) -> dict:
+        """索引概要：索引名/字段/类型/度量。
+
+        Returns:
+            {"index_name", "field_name", "index_type", "metric_type"}；无索引/失败返回 {}
+        """
+        try:
+            if not self.client.has_collection(collection_name):
+                return {}
+            # pymilvus 3.x describe_index 需要 index_name 参数，先尝试枚举索引名
+            index_names: list[str] = []
+            try:
+                listed = self.client.list_indexes(collection_name)
+                index_names = [str(n) for n in listed] if isinstance(listed, list) else []
+            except Exception:
+                index_names = []
+            if not index_names:
+                # fallback：用集合 schema 中向量字段名作为索引名（Milvus 默认索引名 = 字段名）
+                desc = self.describe_collection(collection_name)
+                index_names = [f.get("name") for f in desc.get("fields", []) if f.get("dim")]
+            if not index_names:
+                return {}
+
+            info = self.client.describe_index(collection_name, index_names[0])
+            items = info if isinstance(info, list) else [info]
+            first = items[0] if items else {}
+            d = first if isinstance(first, dict) else getattr(first, "to_dict", lambda: {})()
+            return {
+                "index_name": d.get("index_name") or d.get("indexName") or str(index_names[0]),
+                "field_name": d.get("field_name") or d.get("fieldName") or "",
+                "index_type": d.get("index_type") or d.get("indexType") or "",
+                "metric_type": d.get("metric_type") or d.get("metricType") or "",
+            }
+        except Exception as e:
+            logger.warning(f"[Milvus] describe_index {collection_name} 失败: {e}")
+            return {}
+
     def count(self, collection_name: str) -> int:
-        """统计记录数"""
+        """统计记录数（优先 get_collection_stats，兼容 Milvus 2.4+）"""
         try:
             if not self.client.has_collection(collection_name):
                 return -1
+            stats = self.client.get_collection_stats(collection_name)
+            if isinstance(stats, dict) and stats.get("row_count") is not None:
+                return int(stats["row_count"])
+        except Exception as e:
+            logger.warning(f"[Milvus] get_collection_stats {collection_name} 失败: {e}")
+        try:
             result = self.client.query(
                 collection_name=collection_name,
                 filter="",

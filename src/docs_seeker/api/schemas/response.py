@@ -52,3 +52,24 @@ class LLMStats(BaseModel):
 class StatsResponse(BaseModel):
     cache: CacheStats
     llm: LLMStats
+
+
+class MilvusIndexInfo(BaseModel):
+    index_name: str = ""
+    field_name: str = ""
+    index_type: str = ""
+    metric_type: str = ""
+
+
+class MilvusCollectionStats(BaseModel):
+    name: str = ""
+    exists: bool = False
+    count: int = -1
+    dim: int | None = None
+    index: MilvusIndexInfo | None = None
+
+
+class MilvusStatsResponse(BaseModel):
+    connected: bool = False
+    server_version: str = ""
+    collections: dict[str, MilvusCollectionStats] = {}

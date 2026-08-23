@@ -36,6 +36,7 @@
 - 语义缓存修复（P1-3/P1-4）：`array('f')` 字节编码、`doc["sources"]` 用 `[]` 访问、KNN `dialect=2`、索引维度动态化 + 漂移自愈；新增 `SEMANTIC_CACHE_ENABLED` 环境变量开关（默认开启，`.env.example` 已注释说明）；新增 `tests/test_semantic_cache.py`（5 例全过）；顺手修 P2-9（Settings 改用 `SettingsConfigDict`）
 - 前端对接（client 仓库，独立 git）：新增 `GET /v1/stats` 只读指标端点（语义缓存 + LLM 网关统计，供前端看板）；修复 `_require_dim` 空文本探测 bug（百炼拒绝空 input，改用"维度探测"，实测 text-embedding-v4 = 1024 维）
 - Docker 运维基线（P3-7）：非 root 用户（app:1000）、Dockerfile/compose 双份 healthcheck（urllib 调 `/v1/health`）、新增 `.dockerignore`（防 .venv/.uv-cache/.env/tests 进镜像）；注：DSH 沙箱无法连接 docker daemon（named pipe 限制），未实际 build，待真机验证
+- Milvus 监控看板：新增 `GET /v1/milvus/stats`（集合状态/行数/向量维度/索引）；修复 `MilvusStore.count`（改用 `get_collection_stats`，原 count 在 Milvus 2.6 报 "pagination not allowed"）、`describe_index`（pymilvus 3.x 需 index_name，先 list_indexes 枚举）；前端 Dashboard 新增 Milvus 监控面板（与数据库管理同行）。⚠️ 发现库向量维度 1536 vs embedding 1024 不匹配，见 P2-13
 - 静态审查（后台子代理）结论：重构后导入图自洽、无循环导入、无旧扁平模块残留引用、实体迁移全链路一致；严重项均为既有 P1（P1-3 已细化三重故障诊断，见 3.1）
 - 未纳入本次范围（按清单后续修）：P1-1/P1-2 依赖缺失、P1-3 语义缓存 bytes、P1-4 缓存维度、P2 系列等
 - 新发现问题：BM25 结果无 id → /chat 去重坍缩，见 P2-12
@@ -131,6 +132,7 @@ src/docs_seeker/
 | P2-10 | `MilvusStore.search` 异常时静默返回 `[]` | `infra/milvus_store.py:82-84` | 上层无法区分"无结果"与"失败"，chat 拿空上下文仍生成 → 幻觉风险 |
 | P2-11 | 每次 chat 都调 LLM 做查询分解，无缓存/无简单问题短路 | `retrieval/query_decomposer.py`、`application/services/chat_service.py` | 每次问答额外 1 次 LLM 调用 + 延迟 + 成本 |
 | P2-12 | BM25 检索结果无 id（`get_all_documents` 未取 id 字段）→ /chat 按 id 去重时全部以 "" 归并，BM25 命中几乎全部被去重掉 | `retrieval/bm25_retriever.py` + `application/pipelines/rag_pipeline.py` | 问答链路召回受损；重构时保持原行为，修复方向：`get_all_documents` 补 id 或用内容哈希兜底 |
+| P2-13 | 🔴 向量维度不匹配：Milvus 库中向量字段 dim=1536（doc-kit 入库），而 docs-seeker embedder 输出 1024（text-embedding-v4 默认）→ dense/summary 检索向量维度不符，检索失败或结果异常 | `infra/embedding/embedder.py` | 检索质量根因级问题（已实测确认：describe_collection dim=1536 vs embedding len=1024）；修复方向：embedder 调用加 `dimensions=1536`（需实测百炼兼容），或 doc-kit 重新以 1024 维入库 |
 
 ### 3.3 🟡 P3 工程化欠账
 
