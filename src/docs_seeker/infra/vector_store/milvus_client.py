@@ -50,38 +50,58 @@ class MilvusStore:
                              "section", "section_title", "article", "article_title"]
 
         try:
-            results = self.client.search(
-                collection_name=collection_name,
-                data=[query_vector],
-                limit=top_k,
-                filter=filter_expr or "",
-                output_fields=output_fields,
-            )
-            if not results:
-                return []
-
-            # MilvusClient.search 返回 [[{id, distance, entity:{...}}, ...]]
-            hits = results[0] if isinstance(results[0], list) else results
-            docs = []
-            for hit in hits:
-                entity = hit.get("entity", hit) if isinstance(hit, dict) else {}
-                docs.append({
-                    "id": hit.get("id", ""),
-                    "distance": hit.get("distance", 0.0),
-                    "text": entity.get("text", ""),
-                    "source": entity.get("source", ""),
-                    "pages": entity.get("pages", ""),
-                    "chapter": entity.get("chapter", ""),
-                    "chapter_title": entity.get("chapter_title", ""),
-                    "section": entity.get("section", ""),
-                    "section_title": entity.get("section_title", ""),
-                    "article": entity.get("article", ""),
-                    "article_title": entity.get("article_title", ""),
-                })
-            return docs
+            return self._do_search(collection_name, query_vector, top_k, filter_expr, output_fields)
         except Exception as e:
+            # 集合未加载（code=101 collection not loaded）：自动 load 后重试一次（自愈）
+            if getattr(e, "code", None) == 101:
+                logger.warning(f"[Milvus] 集合 {collection_name} 未加载，自动 load 后重试")
+                try:
+                    self.client.load_collection(collection_name)
+                    return self._do_search(collection_name, query_vector, top_k, filter_expr, output_fields)
+                except Exception as e2:
+                    logger.error(f"[Milvus] load+search 重试失败 {collection_name}: {e2}")
+                    return []
             logger.error(f"[Milvus] search {collection_name} 失败: {e}")
             return []
+
+    def _do_search(
+        self,
+        collection_name: str,
+        query_vector: list[float],
+        top_k: int,
+        filter_expr: str,
+        output_fields: list[str],
+    ) -> list[dict[str, Any]]:
+        """实际执行 Milvus search（供 search 调用与未加载重试复用）"""
+        results = self.client.search(
+            collection_name=collection_name,
+            data=[query_vector],
+            limit=top_k,
+            filter=filter_expr or "",
+            output_fields=output_fields,
+        )
+        if not results:
+            return []
+
+        # MilvusClient.search 返回 [[{id, distance, entity:{...}}, ...]]
+        hits = results[0] if isinstance(results[0], list) else results
+        docs = []
+        for hit in hits:
+            entity = hit.get("entity", hit) if isinstance(hit, dict) else {}
+            docs.append({
+                "id": hit.get("id", ""),
+                "distance": hit.get("distance", 0.0),
+                "text": entity.get("text", ""),
+                "source": entity.get("source", ""),
+                "pages": entity.get("pages", ""),
+                "chapter": entity.get("chapter", ""),
+                "chapter_title": entity.get("chapter_title", ""),
+                "section": entity.get("section", ""),
+                "section_title": entity.get("section_title", ""),
+                "article": entity.get("article", ""),
+                "article_title": entity.get("article_title", ""),
+            })
+        return docs
 
     def query_by_chapter(
         self,
