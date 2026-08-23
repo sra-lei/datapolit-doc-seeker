@@ -18,8 +18,10 @@
 services:
   docs-seeker:
     # 与 .cnb.yml 构建/推送的镜像名完全对齐；若服务器端未注入 CNB 环境变量，
-    # 回退到与仓库路径一致的默认值 docker.cnb.cool/<your-username>/datapolit-docs-seeker:latest
-    image: ${CNB_DOCKER_REGISTRY:-docker.cnb.cool}/${CNB_REPO_SLUG_LOWERCASE:-sra_lei/datapolit-docs-seeker}:latest
+    # 回退到与仓库路径一致的默认值 docker.cnb.cool/<your-username>/datapolit-doc-seeker:latest
+    # 注意：镜像名跟随 CNB 远程仓库 slug（datapolit-doc-seeker，该仓库名本身少一个 s）；
+    # 而服务名/容器名/启动命令必须是 docs-seeker / docs_seeker（Python 包名），两者不要混淆
+    image: ${CNB_DOCKER_REGISTRY:-docker.cnb.cool}/${CNB_REPO_SLUG_LOWERCASE:-sra_lei/datapolit-doc-seeker}:latest
     # 容器名固定为 datapolit-docs-seeker：client/nginx.conf 反代目标（datapolit-shared 网络内）依赖该名字
     container_name: datapolit-docs-seeker
     command: uvicorn docs_seeker.app:app --host 0.0.0.0 --port 8001 --workers 1
