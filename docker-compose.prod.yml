@@ -1,12 +1,12 @@
 # ============================================================
-# docs-seeker - 生产环境部署（服务器拉镜像版）
+# doc-seeker - 生产环境部署（服务器拉镜像版）
 #
 # 使用：
-#   docker compose -f docker-compose.prod.yml pull docs-seeker
-#   docker compose -f docker-compose.prod.yml up -d docs-seeker
-#   docker compose -f docker-compose.prod.yml logs -f docs-seeker
+#   docker compose -f docker-compose.prod.yml pull doc-seeker
+#   docker compose -f docker-compose.prod.yml up -d doc-seeker
+#   docker compose -f docker-compose.prod.yml logs -f doc-seeker
 #
-# 前置：服务器 /opt/datapolit-docs-seeker 下必须存在 .env（密钥不进仓库，
+# 前置：服务器 /opt/datapolit-doc-seeker 下必须存在 .env（密钥不进仓库，
 # 首次部署手动放置），关键字段：
 #   DASHSCOPE_API_KEY           （百炼 Embedding）
 #   DEEPSEEK_API_KEY            （DeepSeek 对话 LLM）
@@ -16,13 +16,13 @@
 # ============================================================
 
 services:
-  docs-seeker:
+  doc-seeker:
     # 与 .cnb.yml 构建/推送的镜像名完全对齐；若服务器端未注入 CNB 环境变量，
-    # 回退到与仓库路径一致的默认值 docker.cnb.cool/<your-username>/datapolit-docs-seeker:latest
-    image: ${CNB_DOCKER_REGISTRY:-docker.cnb.cool}/${CNB_REPO_SLUG_LOWERCASE:-sra_lei/datapolit-docs-seeker}:latest
-    # 容器名固定为 datapolit-docs-seeker：client/nginx.conf 反代目标（datapolit-shared 网络内）依赖该名字
-    container_name: datapolit-docs-seeker
-    command: uvicorn docs_seeker.app:app --host 0.0.0.0 --port 8001 --workers 1
+    # 回退到与仓库路径一致的默认值 docker.cnb.cool/<your-username>/datapolit-doc-seeker:latest
+    image: ${CNB_DOCKER_REGISTRY:-docker.cnb.cool}/${CNB_REPO_SLUG_LOWERCASE:-sra_lei/datapolit-doc-seeker}:latest
+    # 容器名固定为 datapolit-doc-seeker：client/nginx.conf 反代目标（datapolit-shared 网络内）依赖该名字
+    container_name: datapolit-doc-seeker
+    command: uvicorn doc_seeker.app:app --host 0.0.0.0 --port 8001 --workers 1
     restart: unless-stopped
 
     ports:
