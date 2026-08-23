@@ -1,17 +1,5 @@
-"""docs-seeker - 请求/响应模型"""
-from pydantic import BaseModel, Field
-
-
-class ChatMessage(BaseModel):
-    role: str
-    content: str
-
-
-class ChatRequest(BaseModel):
-    question: str = Field(..., min_length=1, max_length=500)
-    conversation_history: list[ChatMessage] | None = None
-    top_k: int = Field(10, ge=1, le=30)
-    use_cache: bool = True
+"""响应模型"""
+from pydantic import BaseModel
 
 
 class SourceDoc(BaseModel):
@@ -34,12 +22,6 @@ class ChatResponse(BaseModel):
     query_decomposed: list[str] | None = None
 
 
-class RetrieveRequest(BaseModel):
-    query: str = Field(..., min_length=1, max_length=500)
-    top_k: int = Field(10, ge=1, le=30)
-    use_summary: bool = True
-
-
 class RetrieveResponse(BaseModel):
     docs: list[SourceDoc] = []
     total: int = 0
@@ -49,3 +31,24 @@ class HealthResponse(BaseModel):
     status: str = "ok"
     milvus_connected: bool = False
     redis_connected: bool = False
+
+
+class CacheStats(BaseModel):
+    enabled: bool = True
+    hits: int = 0
+    misses: int = 0
+    hit_rate: str = "0.0%"
+    threshold: float = 0.92
+
+
+class LLMStats(BaseModel):
+    total_calls: int = 0
+    success_calls: int = 0
+    fallback_calls: int = 0
+    circuit_state: str = "closed"
+    circuit_failures: int = 0
+
+
+class StatsResponse(BaseModel):
+    cache: CacheStats
+    llm: LLMStats

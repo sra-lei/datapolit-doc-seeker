@@ -2,15 +2,17 @@
 docs-seeker - LLM 网关
 提供：重试、超时、熔断、降级、统一调用入口
 """
-import time
 import os
+import time
 from enum import Enum
 from threading import Lock
+
 from dotenv import load_dotenv
 from openai import OpenAI
 from loguru import logger
 
 from docs_seeker.config import settings
+from docs_seeker.domain.interfaces.llm import LLMProvider
 
 load_dotenv()
 
@@ -60,7 +62,7 @@ class CircuitBreakerOpenError(Exception):
     pass
 
 
-class LLMGateway:
+class LLMGateway(LLMProvider):
     def __init__(self):
         self.primary_client = OpenAI(api_key=settings.deepseek_api_key, base_url=settings.deepseek_base_url)
         self.primary_model = settings.llm_model

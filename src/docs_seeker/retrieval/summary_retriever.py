@@ -4,17 +4,20 @@ docs-seeker - 摘要引导检索（Summary-guided Retrieval）
 """
 from loguru import logger
 
-from docs_seeker.infra.milvus_store import get_milvus_store
-from docs_seeker.infra.embedder import get_embedder
 from docs_seeker.config import settings
+from docs_seeker.domain.entities.chunk import Chunk
+from docs_seeker.domain.entities.document import Document
+from docs_seeker.domain.interfaces.retriever import Retriever
+from docs_seeker.infra.embedding.embedder import get_embedder
+from docs_seeker.infra.vector_store.milvus_client import get_milvus_store
 
 
-class SummaryRetriever:
+class SummaryRetriever(Retriever):
     """摘要引导检索器
 
     两阶段：
-    1. 在摘要集合中做向量检索，找到相关章节
-    2. 用章节名作为 filter，在正文集合中检索
+    1. 在摘要集合中做向量检索，找到相关章节（Document）
+    2. 用章节名过滤，在正文集合中检索（Chunk）
     """
 
     def __init__(self):
@@ -23,7 +26,7 @@ class SummaryRetriever:
         self.collection_name = settings.collection_name
         self.summary_collection_name = settings.summary_collection_name
 
-    def search(self, query: str, top_k: int = 10) -> list[dict]:
+    def search(self, query: str, top_k: int = 10) -> list[Chunk]:
         """摘要引导检索
 
         Args:
@@ -31,7 +34,7 @@ class SummaryRetriever:
             top_k: 最终返回正文数量
 
         Returns:
-            [{id, text, source, chapter, ..., score}, ...]
+            按相关性降序的 Chunk 列表
         """
         query_vector = self.embedder.get_embedding(query)
 
@@ -46,8 +49,18 @@ class SummaryRetriever:
             logger.info("摘要引导检索：摘要集合为空，跳过")
             return []
 
+        documents = [
+            Document(
+                id=h.get("id", ""),
+                chapter=h.get("chapter", ""),
+                chapter_title=h.get("chapter_title", ""),
+                summary=h.get("text", ""),
+            )
+            for h in summary_hits
+        ]
+
         # 提取相关章节
-        chapters = list(set(h.get("chapter", "") for h in summary_hits if h.get("chapter")))
+        chapters = list(set(d.chapter for d in documents if d.chapter))
         if not chapters:
             return []
 
@@ -61,13 +74,15 @@ class SummaryRetriever:
             output_fields=["text", "source", "pages", "chapter", "chapter_title",
                            "section", "section_title", "article", "article_title"],
         )
-        # 过滤出相关章节
-        filtered = [r for r in results if r.get("chapter") in chapters]
-        if not filtered:
-            filtered = results  # fallback：如果过滤后为空，返回全部
+        chunks = [Chunk.from_dict(r) for r in results]
 
-        for doc in filtered:
-            doc["score"] = max(0, 1 - doc.get("distance", 0))
+        # 过滤出相关章节
+        filtered = [c for c in chunks if c.chapter in chapters]
+        if not filtered:
+            filtered = chunks  # fallback：如果过滤后为空，返回全部
+
+        for chunk in filtered:
+            chunk.score = max(0, 1 - chunk.distance)
 
         logger.info(f"摘要引导检索完成: query='{query[:30]}...' hits={len(filtered)}")
         return filtered[:top_k]

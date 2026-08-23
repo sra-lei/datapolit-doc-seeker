@@ -1,0 +1,28 @@
+# 版本控制
+.git/
+.gitignore
+
+# Python 缓存与构建产物
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+
+# 虚拟环境与包管理器缓存
+.venv/
+.uv-cache/
+
+# 本地配置（含密钥，避免进镜像）
+.env
+
+# 测试与本地文档（镜像构建不需要）
+tests/
+STATUS.md
+
+# 运行时数据
+data/
+logs/

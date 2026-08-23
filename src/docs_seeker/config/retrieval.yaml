@@ -1,0 +1,15 @@
+# 检索策略配置（权重/阈值等）
+# 代码读取时若缺失对应键，回退到代码内默认值
+
+# RRF 融合参数
+rrf:
+  k: 60
+  weights:
+    dense: 0.5
+    bm25: 0.3
+    summary: 0.2
+
+# 融合前单路召回数量
+composite:
+  fetch_factor: 3
+  max_fetch: 30

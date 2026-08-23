@@ -4,12 +4,14 @@ docs-seeker - 语义检索（Dense Retrieval）
 """
 from loguru import logger
 
-from docs_seeker.infra.milvus_store import get_milvus_store
-from docs_seeker.infra.embedder import get_embedder
 from docs_seeker.config import settings
+from docs_seeker.domain.entities.chunk import Chunk
+from docs_seeker.domain.interfaces.retriever import Retriever
+from docs_seeker.infra.embedding.embedder import get_embedder
+from docs_seeker.infra.vector_store.milvus_client import get_milvus_store
 
 
-class DenseRetriever:
+class DenseRetriever(Retriever):
     """语义检索器：查询 → embedding → Milvus search"""
 
     def __init__(self):
@@ -17,7 +19,7 @@ class DenseRetriever:
         self.embedder = get_embedder()
         self.collection_name = settings.collection_name
 
-    def search(self, query: str, top_k: int = 10, filter_expr: str = "") -> list[dict]:
+    def search(self, query: str, top_k: int = 10, filter_expr: str = "") -> list[Chunk]:
         """语义检索
 
         Args:
@@ -26,7 +28,7 @@ class DenseRetriever:
             filter_expr: Milvus filter 表达式
 
         Returns:
-            [{id, text, source, chapter, ..., score}, ...]
+            按相关性降序的 Chunk 列表
         """
         query_vector = self.embedder.get_embedding(query)
         results = self.milvus.search(
@@ -35,8 +37,10 @@ class DenseRetriever:
             top_k=top_k,
             filter_expr=filter_expr,
         )
-        # Milvus 返回 distance（越小越相似），转为 score（越大越好）
+        chunks = []
         for doc in results:
+            # Milvus 返回 distance（越小越相似），转为 score（越大越好）
             doc["score"] = max(0, 1 - doc.get("distance", 0))
-        logger.info(f"DenseRetriever 检索完成: query='{query[:30]}...' top_k={top_k} hits={len(results)}")
-        return results
+            chunks.append(Chunk.from_dict(doc))
+        logger.info(f"DenseRetriever 检索完成: query='{query[:30]}...' top_k={top_k} hits={len(chunks)}")
+        return chunks

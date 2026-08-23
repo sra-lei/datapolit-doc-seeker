@@ -4,14 +4,17 @@ docs-seeker - BM25 稀疏检索
 """
 import math
 from collections import Counter
+
 import jieba
 from loguru import logger
 
-from docs_seeker.infra.milvus_store import get_milvus_store
 from docs_seeker.config import settings
+from docs_seeker.domain.entities.chunk import Chunk
+from docs_seeker.domain.interfaces.retriever import Retriever
+from docs_seeker.infra.vector_store.milvus_client import get_milvus_store
 
 
-class BM25Retriever:
+class BM25Retriever(Retriever):
     """BM25 检索器：从 Milvus 拉全量文档 + 本地 BM25 计算"""
 
     def __init__(self):
@@ -43,7 +46,7 @@ class BM25Retriever:
                 self._bm25_index[term].append((i, freq))
         logger.info(f"BM25 索引构建完成: docs={self._doc_count} terms={len(self._bm25_index)}")
 
-    def search(self, query: str, top_k: int = 10) -> list[dict]:
+    def search(self, query: str, top_k: int = 10) -> list[Chunk]:
         """BM25 检索
 
         Args:
@@ -51,7 +54,7 @@ class BM25Retriever:
             top_k: 返回数量
 
         Returns:
-            [{id, text, source, chapter, ..., score}, ...]
+            按相关性降序的 Chunk 列表
         """
         if not self._docs:
             self.build_index()
@@ -88,8 +91,8 @@ class BM25Retriever:
         scores.sort(key=lambda x: x[1], reverse=True)
         results = []
         for i, score in scores[:top_k]:
-            doc = self._docs[i].copy()
-            doc["score"] = score
-            results.append(doc)
+            chunk = Chunk.from_dict(self._docs[i])
+            chunk.score = score
+            results.append(chunk)
         logger.info(f"BM25 检索完成: query='{query[:30]}...' top_k={top_k} hits={len(results)}")
         return results

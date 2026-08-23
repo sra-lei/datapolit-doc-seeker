@@ -23,3 +23,6 @@ htmlcov/
 # 运行时数据
 data/
 logs/
+
+# uv
+.uv-cache/

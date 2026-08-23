@@ -6,9 +6,10 @@ from openai import OpenAI
 from loguru import logger
 
 from docs_seeker.config import settings
+from docs_seeker.domain.interfaces.embedder import EmbeddingProvider
 
 
-class Embedder:
+class Embedder(EmbeddingProvider):
     """查询向量化服务（调阿里百炼）"""
 
     _instance: "Embedder | None" = None

@@ -2,10 +2,15 @@
 docs-seeker - 配置管理
 所有配置通过环境变量读取，禁止硬编码
 """
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
     # DeepSeek (Chat)
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
@@ -24,16 +29,12 @@ class Settings(BaseSettings):
 
     # Redis（语义缓存）
     redis_url: str = "redis://localhost:6379/0"
+    semantic_cache_enabled: bool = True
     similarity_threshold: float = 0.92
     cache_ttl_hours: int = 24
 
     # 应用配置
     log_level: str = "INFO"
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        extra = "ignore"
 
 
 settings = Settings()
