@@ -5,6 +5,7 @@ import uuid
 from loguru import logger
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from docs_seeker.infra.usage_tracker import get_usage_tracker
 from docs_seeker.utils.metrics import http_request_duration_seconds, http_requests_total
 
 
@@ -27,4 +28,11 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             method=request.method, path=request.url.path, status=response.status_code
         ).inc()
         http_request_duration_seconds.labels(method=request.method, path=request.url.path).observe(duration)
+
+        # RAG 使用统计埋点（仅 /v1/chat、/v1/retrieve；Redis 不可用时静默降级）
+        get_usage_tracker().record(
+            request.headers.get("X-User-ID", ""),
+            request.url.path,
+            response.status_code,
+        )
         return response

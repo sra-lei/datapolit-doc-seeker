@@ -37,6 +37,7 @@
 - 前端对接（client 仓库，独立 git）：新增 `GET /v1/stats` 只读指标端点（语义缓存 + LLM 网关统计，供前端看板）；修复 `_require_dim` 空文本探测 bug（百炼拒绝空 input，改用"维度探测"，实测 text-embedding-v4 = 1024 维）
 - Docker 运维基线（P3-7）：非 root 用户（app:1000）、Dockerfile/compose 双份 healthcheck（urllib 调 `/v1/health`）、新增 `.dockerignore`（防 .venv/.uv-cache/.env/tests 进镜像）；注：DSH 沙箱无法连接 docker daemon（named pipe 限制），未实际 build，待真机验证
 - Milvus 监控看板：新增 `GET /v1/milvus/stats`（集合状态/行数/向量维度/索引）；修复 `MilvusStore.count`（改用 `get_collection_stats`，原 count 在 Milvus 2.6 报 "pagination not allowed"）、`describe_index`（pymilvus 3.x 需 index_name，先 list_indexes 枚举）；前端 Dashboard 新增 Milvus 监控面板（与数据库管理同行）。⚠️ 发现库向量维度 1536 vs embedding 1024 不匹配，见 P2-13
+- RAG 使用统计（按用户维度）：中间件埋点（`X-User-ID` + chat/retrieve + 状态码）写 Redis 独立键 `rag:usage:*`（不受语义缓存开关影响，Redis 不可用时静默降级）；新增 `GET /v1/usage/stats`（总次数/成功率/活跃用户/用户 Top）；前端 `docsSeekerFetch` 附带 `X-User-ID`，Dashboard 右侧"数据库配置与统计"替换为 RAG 使用统计面板
 - 静态审查（后台子代理）结论：重构后导入图自洽、无循环导入、无旧扁平模块残留引用、实体迁移全链路一致；严重项均为既有 P1（P1-3 已细化三重故障诊断，见 3.1）
 - 未纳入本次范围（按清单后续修）：P1-1/P1-2 依赖缺失、P1-3 语义缓存 bytes、P1-4 缓存维度、P2 系列等
 - 新发现问题：BM25 结果无 id → /chat 去重坍缩，见 P2-12

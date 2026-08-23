@@ -118,6 +118,7 @@ HTTP 层 (api/)
 | GET | `/v1/health` | 健康检查 |
 | GET | `/v1/stats` | 运行指标（语义缓存 + LLM 网关统计） |
 | GET | `/v1/milvus/stats` | Milvus 集合监控（状态/行数/向量维度/索引） |
+| GET | `/v1/usage/stats` | RAG 使用统计（总次数/成功率/活跃用户/用户 Top） |
 | GET | `/metrics` | Prometheus 指标 |
 
 ## 启动

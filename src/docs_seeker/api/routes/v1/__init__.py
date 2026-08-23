@@ -6,6 +6,7 @@ from docs_seeker.api.routes.v1.health import router as health_router
 from docs_seeker.api.routes.v1.milvus import router as milvus_router
 from docs_seeker.api.routes.v1.retrieve import router as retrieve_router
 from docs_seeker.api.routes.v1.stats import router as stats_router
+from docs_seeker.api.routes.v1.usage import router as usage_router
 
 v1_router = APIRouter(prefix="/v1")
 v1_router.include_router(chat_router)
@@ -13,5 +14,6 @@ v1_router.include_router(retrieve_router)
 v1_router.include_router(health_router)
 v1_router.include_router(stats_router)
 v1_router.include_router(milvus_router)
+v1_router.include_router(usage_router)
 
 __all__ = ["v1_router"]

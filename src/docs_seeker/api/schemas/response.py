@@ -73,3 +73,17 @@ class MilvusStatsResponse(BaseModel):
     connected: bool = False
     server_version: str = ""
     collections: dict[str, MilvusCollectionStats] = {}
+
+
+class UsageUserStat(BaseModel):
+    user_id: str = ""
+    calls: int = 0
+    success_rate: str = "0.0%"
+
+
+class UsageStatsResponse(BaseModel):
+    total_calls: int = 0
+    success_calls: int = 0
+    success_rate: str = "0.0%"
+    active_users: int = 0
+    users: list[UsageUserStat] = []
