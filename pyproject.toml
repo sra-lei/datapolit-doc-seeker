@@ -32,3 +32,9 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 docs_seeker = ["py.typed", "config/*.yaml"]
+
+[tool.pytest.ini_options]
+# 将 src 加入 pythonpath，确保未执行 pip install -e 时 from docs_seeker.* 也能导入
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"

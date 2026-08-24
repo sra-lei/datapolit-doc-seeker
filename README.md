@@ -106,7 +106,7 @@ HTTP 层 (api/)
 ### 包设计原则
 
 - `src/` 容器目录 + `docs_seeker/` Python 包
-- 遵循 Python Packaging 规范，支持 `pip install -e .` 开发模式
+- 遵循 Python Packaging 规范，使用 `uv` 管理依赖（`uv sync` 安装项目与依赖，`uv.lock` 锁定版本）
 - 明确的命名空间，避免导入冲突
 
 ## API
@@ -124,8 +124,23 @@ HTTP 层 (api/)
 
 ## 启动
 
+使用项目内的 `uv` 虚拟环境：
+
 ```bash
-pip install -e .
+# 同步依赖（含 dev extra：pytest / pytest-asyncio）
+uv sync --extra dev
+
+# 配置环境变量：复制并填写密钥（DeepSeek / 百炼 / Milvus 等）
+cp .env.example .env
+
+# 启动服务
+uv run uvicorn docs_seeker.app:app --host 0.0.0.0 --port 8001
+```
+
+或使用 `pip` + 包安装：
+
+```bash
+pip install -e ".[dev]"
 uvicorn docs_seeker.app:app --host 0.0.0.0 --port 8001
 ```
 
