@@ -124,7 +124,7 @@ HTTP 层 (api/)
 
 ## 启动
 
-使用项目内的 `uv` 虚拟环境：
+依赖统一由 `uv` 管理（`pyproject.toml` + `uv.lock` 为唯一正源，镜像构建同样走 uv）：
 
 ```bash
 # 同步依赖（含 dev extra：pytest / pytest-asyncio）
@@ -137,11 +137,11 @@ cp .env.example .env
 uv run uvicorn docs_seeker.app:app --host 0.0.0.0 --port 8001
 ```
 
-或使用 `pip` + 包安装：
+Docker 构建与启动（镜像内依赖安装使用 `uv sync --frozen`，不再使用 pip / requirements.txt）：
 
 ```bash
-pip install -e ".[dev]"
-uvicorn docs_seeker.app:app --host 0.0.0.0 --port 8001
+docker compose build
+docker compose up -d
 ```
 
 ## 依赖

@@ -42,6 +42,7 @@
 - 静态审查（后台子代理）结论：重构后导入图自洽、无循环导入、无旧扁平模块残留引用、实体迁移全链路一致；严重项均为既有 P1（P1-3 已细化三重故障诊断，见 3.1）
 - 未纳入本次范围（按清单后续修）：P1-1/P1-2 依赖缺失、P1-3 语义缓存 bytes、P1-4 缓存维度、P2 系列等
 - 新发现问题：BM25 结果无 id → /chat 去重坍缩，见 P2-12
+- 依赖单一来源（P3-3）：删除 `requirements.txt`；Dockerfile 迁移到 uv（`python:3.12-slim` 基础镜像 + 构建期 `pip install uv` 引导工具，依赖安装用 `uv sync --frozen --no-dev`）；注：ghcr.io 官方 uv 镜像国内网络拉取失败，故弃用；未实机 docker build 验证
 
 ### 2.1 实际目录结构（与 README 一致，重构后）
 
@@ -84,7 +85,7 @@ src/docs_seeker/
 
 ### 2.2 依赖现状
 
-- `pyproject.toml`（唯一正源，另有重复的 `requirements.txt`）：fastapi / uvicorn / loguru / pydantic / pymilvus / redis / jieba / openai / httpx / langfuse；dev extras：pytest、pytest-asyncio
+- `pyproject.toml` + `uv.lock`（唯一正源，`requirements.txt` 已删除，镜像构建同样走 uv）：fastapi / uvicorn / loguru / pydantic / pymilvus / redis / jieba / openai / httpx / langfuse；dev extras：pytest、pytest-asyncio
 - **缺失**：`pydantic-settings`（config.py 直接 import，未声明 → 全新环境 ImportError）、`python-dotenv`（llm_gateway.py import，仅靠 pydantic-settings 传递安装）
 - **多余**：`langfuse`（声明且 .env.example 有变量，代码零引用）
 - **本次重构新增**：`pyyaml`（config yaml 加载）、`prometheus-client`（/metrics 端点）
@@ -142,7 +143,7 @@ src/docs_seeker/
 |---|---|---|---|
 | P3-1 | 零测试：tests/ 为空，核心纯逻辑（RRF/BM25/guard/脱敏）无保障 | `tests/` | 修复无回归防线 |
 | P3-2 | langfuse 声明未使用 | `pyproject.toml`、`.env.example` | 依赖冗余；`utils/logger.py`、`utils/metrics.py` 与 `GET /metrics` 已随重构落地（部分解决） |
-| P3-3 | 依赖清单双份维护（pyproject + requirements.txt 内容重复） | 两份文件 | 改一处漏一处的风险 |
+| P3-3 | ~~依赖清单双份维护（pyproject + requirements.txt 内容重复）~~ | `Dockerfile`、`requirements.txt` | ✅ 已解决：删除 `requirements.txt`，Dockerfile 迁移到 uv（`python:3.12-slim` + 构建期 `pip install uv`，依赖安装 `uv sync --frozen`），pyproject.toml + uv.lock 单一正源 |
 | P3-4 | 无认证/限流中间件 | api 层 | 请求日志中间件（request_id + 耗时 + 指标）已落地；认证/限流仍未实现 |
 | P3-5 | 其他死代码：`Embedder.get_embeddings_batch/reset`、`SemanticCache.clear/stats`、`MilvusStore.count` 均无调用方 | 对应文件 | 清理或接线（如暴露 metrics 端点） |
 | P3-6 | BM25 `_tokenize` 过滤长度>1，中文单字 token 被丢弃 | `domain/bm25_retriever.py:26` | 单字查询召回差 |
@@ -187,7 +188,7 @@ src/docs_seeker/
 
 - [ ] **P3-1** 补最小测试集：`test_guard.py`（注入/脱敏/误杀回归）、`test_bm25.py`（建索引/检索/刷新）、`test_composite.py`（RRF 融合/去重/权重）、`test_semantic_cache.py`（mock Redis + 修复后的向量编码）；pytest 跑绿
 - [ ] **P3-2** 移除 langfuse 依赖与 .env.example 变量，或真正接入（`utils/metrics.py` + `/metrics` 端点已落地；剩余：langfuse 清理/接线、LLM 调用与检索延迟指标接入，数据源已具备：LLMGateway.stats、SemanticCache.stats）
-- [ ] **P3-3** 依赖单一来源：删 `requirements.txt` 或改为 `-e .[dev]` 入口，以 pyproject 为唯一正源
+- [x] **P3-3** 依赖单一来源：已删 `requirements.txt`，Dockerfile 迁移到 uv（`uv sync --frozen`），pyproject.toml + uv.lock 为唯一正源
 - [ ] **P3-4** 补中间件（日志 request_id 已落地；剩余：限流、鉴权如 API Key）
 - [ ] **P3-5** 死代码清理或接线（见 3.3 P3-5）
 - [ ] **P3-6** BM25 tokenize 策略调优（保留单字或按需）
