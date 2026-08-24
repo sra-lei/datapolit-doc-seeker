@@ -202,3 +202,61 @@ src/docs_seeker/
 - 链路冒烟：`POST /v1/retrieve` 返回带 `chapter/source` 的文档；`POST /v1/chat` 返回 answer + sources
 - 缓存验证：同一问题连续问两次，第二次响应 `cached=true`
 - 每次 Phase 完成后全量跑 pytest + 上述冒烟，再进入下一 Phase
+
+---
+
+## 6. P4 候选需求：热门问题 Top10（ChatWidget 欢迎语 + 预热省 token）
+
+> 状态：**方案已定，待实施**（用户已确认归并粒度/存储/隐私决策）
+
+### 6.1 目标
+
+- **主用途**：ChatWidget 打开时展示 Top10 热门问题作为欢迎语快捷按钮，用户点击直接提问
+- **附加价值**：对 Top10 问题主动预热语义缓存，减少高频问题重复检索 + LLM 生成的 token 花费
+
+### 6.2 已确认的决策
+
+| 决策点 | 结论 |
+|---|---|
+| 归并粒度 | 问题文本**精确匹配**（归一化：strip + 压缩空白 + 小写）；匹配不到的走语义缓存兜底（已有，阈值 0.92） |
+| 存储 | **Redis**（不引入 SQLite）——与现有 usage 统计同体系（`rag:usage:top` ZSet） |
+| 隐私 | 不做脱敏（都是针对文档的提问，无个人问题） |
+| 记录范围 | chat 请求的问题文本（归一化后 ≤200 字符，过短/空跳过） |
+
+### 6.3 方案设计
+
+**① 记录层（`infra/usage_tracker.py` 扩展）**
+- `record()` 增加 `question` 参数（chat_service 传入）；归一化后 `ZINCRBY rag:usage:top 1 <问题>`
+- Redis 不可用时降级跳过（与现 usage 一致）
+
+**② Top 查询**
+- 新端点 `GET /v1/usage/top?limit=10`（或并入 `/v1/usage/stats` 加 `top` 字段，待定）
+- 返回 `[{question, count, cached}]`，`cached` = 语义缓存 search 命中判定（供预热器与前端标记）
+
+**③ 预热器（省 token 核心，`infra/warmup.py`）**
+- 后台线程 + 定时（默认每 6h）：对 Top10 中 `cached=false` 的问题，**复用 `chat_service.pipeline.run` + `cache.store`** 跑一遍写缓存
+- Redis 锁防多实例重复预热；Top 列表变化（hash 对比）才重预热
+- 预热失败不阻塞（try/except + 日志）
+- 配置：`TOP_WARMUP_ENABLED`（默认 true）、`TOP_WARMUP_INTERVAL`、`TOP_WARMUP_SIZE`（默认 10）
+
+**④ 前端（ChatWidget 欢迎语）**
+- ChatWidget 打开且消息为空时拉取 `/v1/usage/top` → 展示 Top 问题快捷按钮
+- 点击按钮 → 复用 `handleSend` 逻辑直接提问（该问题大概率已预热命中缓存）
+
+### 6.4 效果与成本
+
+| 场景 | 现状（仅被动缓存） | 加预热后 |
+|---|---|---|
+| top 问题首次被问 | 全量检索 + LLM | 预热后直接命中缓存（0 LLM） |
+| top 问题重复问 | 命中缓存 | 命中缓存 |
+| 预热成本 | — | 每周期 ≤10 次 LLM 调用 |
+
+### 6.5 实施清单（照单执行）
+
+- [ ] `usage_tracker.record` 增加 `question` 参数 + ZINCRBY 记录（归一化 + 长度过滤）
+- [ ] `usage_tracker.top_questions(n)` 聚合（含 `cached` 标记）
+- [ ] `GET /v1/usage/top` 端点 + schema
+- [ ] `infra/warmup.py` 预热器（线程 + Redis 锁 + Top hash 对比 + 配置开关）
+- [ ] 配置项：`TOP_WARMUP_ENABLED` / `TOP_WARMUP_INTERVAL` / `TOP_WARMUP_SIZE`
+- [ ] ChatWidget 欢迎语：拉取 top + 快捷按钮（点击即问）
+- [ ] 验证：记录/聚合/预热链路、缓存命中、Redis 降级、前端交互
