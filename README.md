@@ -147,7 +147,6 @@ uvicorn docs_seeker.app:app --host 0.0.0.0 --port 8001
    - 每次检索前对比 Milvus 的 `collection.count()` 指纹（记录数 + 最新 id 哈希）
    - 指纹未变 → 直接用内存索引（零开销）
    - 指纹变化 → 惰性重建索引，再检索
-   - 参考 chartermate 原 `BM25Retriever.ensure_fresh()` 方案
 
 2. **分页/增量加载**
    - 启动时只加载最近 N 篇文档建索引
