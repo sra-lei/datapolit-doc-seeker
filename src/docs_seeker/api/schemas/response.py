@@ -87,3 +87,13 @@ class UsageStatsResponse(BaseModel):
     success_rate: str = "0.0%"
     active_users: int = 0
     users: list[UsageUserStat] = []
+
+
+class UsageTopQuestion(BaseModel):
+    question: str = ""
+    count: int = 0
+    cached: bool = False
+
+
+class UsageTopResponse(BaseModel):
+    questions: list[UsageTopQuestion] = []

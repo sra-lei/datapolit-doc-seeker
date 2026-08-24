@@ -207,7 +207,7 @@ src/docs_seeker/
 
 ## 6. P4 候选需求：热门问题 Top10（ChatWidget 欢迎语 + 预热省 token）
 
-> 状态：**方案已定，待实施**（用户已确认归并粒度/存储/隐私决策）
+> 状态：**已实施完成**（方案见下，实施清单全部勾选）
 
 ### 6.1 目标
 
@@ -253,10 +253,10 @@ src/docs_seeker/
 
 ### 6.5 实施清单（照单执行）
 
-- [ ] `usage_tracker.record` 增加 `question` 参数 + ZINCRBY 记录（归一化 + 长度过滤）
-- [ ] `usage_tracker.top_questions(n)` 聚合（含 `cached` 标记）
-- [ ] `GET /v1/usage/top` 端点 + schema
-- [ ] `infra/warmup.py` 预热器（线程 + Redis 锁 + Top hash 对比 + 配置开关）
-- [ ] 配置项：`TOP_WARMUP_ENABLED` / `TOP_WARMUP_INTERVAL` / `TOP_WARMUP_SIZE`
-- [ ] ChatWidget 欢迎语：拉取 top + 快捷按钮（点击即问）
-- [ ] 验证：记录/聚合/预热链路、缓存命中、Redis 降级、前端交互
+- [x] `usage_tracker.record` 增加 `question` 参数 + ZINCRBY 记录（归一化 + 长度过滤）——实际为独立 `record_question()`（chat_service 调用，middleware 记录不动）
+- [x] `usage_tracker.top_questions(n)` 聚合（含 `cached` 标记）
+- [x] `GET /v1/usage/top` 端点 + schema（`limit` 1~50，默认 10）
+- [x] `infra`→`application/services/top_warmup.py` 预热器（后台线程 + Redis 锁 + 配置开关；直接走 pipeline + cache.store，不重复计数）
+- [x] 配置项：`TOP_WARMUP_ENABLED` / `TOP_WARMUP_INTERVAL_HOURS` / `TOP_WARMUP_SIZE`
+- [x] ChatWidget 欢迎语：打开时拉取 Top6 快捷按钮（点击即问，handleSend 参数化）
+- [x] 验证：pytest 通过、/v1/usage/top 200（Redis 降级返回空）、tsc 通过

@@ -7,6 +7,7 @@ from loguru import logger
 
 from docs_seeker.api.middleware import RequestLoggingMiddleware
 from docs_seeker.api.routes import router
+from docs_seeker.application.services.top_warmup import get_top_warmup
 from docs_seeker.config import settings
 from docs_seeker.utils.logger import setup_logging
 from docs_seeker.utils.metrics import metrics_response
@@ -16,7 +17,9 @@ from docs_seeker.utils.metrics import metrics_response
 async def lifespan(app: FastAPI):
     setup_logging(settings.log_level)
     logger.info("docs-seeker 启动中...")
+    get_top_warmup().start()
     yield
+    get_top_warmup().stop()
     logger.info("docs-seeker 已关闭")
 
 

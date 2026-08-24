@@ -12,6 +12,8 @@ from docs_seeker.api.schemas.response import (
     SourceDoc,
     StatsResponse,
     UsageStatsResponse,
+    UsageTopQuestion,
+    UsageTopResponse,
     UsageUserStat,
 )
 
@@ -30,5 +32,7 @@ __all__ = [
     "SourceDoc",
     "StatsResponse",
     "UsageStatsResponse",
+    "UsageTopQuestion",
+    "UsageTopResponse",
     "UsageUserStat",
 ]

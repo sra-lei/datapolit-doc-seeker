@@ -37,5 +37,10 @@ class Settings(BaseSettings):
     # 应用配置
     log_level: str = "INFO"
 
+    # 热门问题 Top10（P4）：记录 + 预热语义缓存（ChatWidget 欢迎语用）
+    top_warmup_enabled: bool = True
+    top_warmup_interval_hours: int = 6
+    top_warmup_size: int = 10
+
 
 settings = Settings()

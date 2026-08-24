@@ -6,6 +6,7 @@ from loguru import logger
 from docs_seeker.application.pipelines.rag_pipeline import RAGPipeline
 from docs_seeker.infra.cache.semantic_cache import get_semantic_cache
 from docs_seeker.infra.security.guard import check_injection, sanitize_output
+from docs_seeker.infra.usage_tracker import get_usage_tracker
 
 # 写入语义缓存 / 组装响应时保留的字段（与 SourceDoc 对齐）
 CACHE_FIELDS = ("id", "text", "source", "chapter", "chapter_title", "section", "section_title", "score", "sources")
@@ -32,6 +33,9 @@ class ChatService:
         ok, reason = check_injection(question)
         if not ok:
             return ChatResult(answer=reason, confidence="low")
+
+        # 热门问题计数（精确匹配归并；Redis 不可用时降级）
+        get_usage_tracker().record_question(question)
 
         if use_cache:
             cached = self.cache.search(question)
