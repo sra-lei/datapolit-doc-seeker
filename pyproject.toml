@@ -25,16 +25,41 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0.0", "pytest-asyncio>=0.21.0"]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "ruff>=0.4.0",
+    "mypy>=1.8.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-docs_seeker = ["py.typed", "config/*.yaml"]
+docs_seeker = ["py.typed", "core/*.yaml"]
 
 [tool.pytest.ini_options]
 # 将 src 加入 pythonpath，确保未执行 pip install -e 时 from docs_seeker.* 也能导入
 pythonpath = ["src"]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+src = ["src", "tests"]
+exclude = [".venv", ".uv-cache"]
+
+[tool.ruff.lint]
+# 起步以错误级规则为主（pyflakes/pycodestyle/import 排序），避免风格噪声淹没问题
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]  # 行宽由 formatter 负责，不强制手写
+
+[tool.mypy]
+# 实际运行环境为 CPython 3.12（本机 venv 与 Docker python:3.12-slim）；
+# numpy 等依赖的 stubs 已使用 3.12 语法，mypy 解析需对齐该版本
+python_version = "3.12"
+files = ["src/docs_seeker"]
+strict = false
+ignore_missing_imports = true
+exclude = ["\\.venv/"]

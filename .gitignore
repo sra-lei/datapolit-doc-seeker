@@ -26,3 +26,7 @@ logs/
 
 # uv
 .uv-cache/
+.uv-cache-fresh/
+
+# pytest 缓存目录（Windows 下无法写入 .pytest_cache 时的回退目录）
+pytest-cache-files-*/

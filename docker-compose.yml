@@ -9,7 +9,7 @@ services:
     volumes:
       - ./src:/app/src
     restart: unless-stopped
-    command: uvicorn docs_seeker.app:app --host 0.0.0.0 --port 8001 --reload
+    command: uvicorn docs_seeker.api.main:app --host 0.0.0.0 --port 8001 --reload
     healthcheck:
       test:
         [

@@ -25,13 +25,13 @@
 
 ### 2.0 架构调整记录（本次已完成）
 
-- 目录结构调整为 README 目标架构（见 2.1）：config 拆分 `settings.py` + `prompts.yaml` + `retrieval.yaml`；domain 只保留 `entities/` 与 `interfaces/`；检索实现移至 `retrieval/`；新增 `application/services` + `pipelines`；infra 按 `vector_store/cache/llm/embedding/security` 分子目录；api 拆 `routes/v1` + `schemas/{request,response}` + `middleware`；新增 `utils/logger.py`、`utils/metrics.py`
+- 目录结构调整为 README 目标架构（见 2.1）：config 拆分 `settings.py` + `prompts.yaml` + `retrieval.yaml`；domain 只保留 `entities/` 与 `interfaces/`；检索实现移至 `retrieval/`；新增 `application/services` + `pipelines`；infra 按 `vector_store/cache/llm/embedding/security` 分子目录；api 拆 `routes/v1` + `schemas/{request,response}` + `middleware`；新增 `infra/observability/logger.py`、`infra/observability/metrics.py`
 - 行为保持不变的机械搬移：dense/bm25/summary/composite/decomposer/hybrid_router/generator、milvus/embedder/semantic_cache/llm_gateway/guard
 - 检索结果由 dict 改为领域实体 `Chunk/Document/Query`（dict → 实体在检索器出口完成，行为等价）
 - 配置外部化落地：generator/query_decomposer 的 Prompt 从 `prompts.yaml` 读取（缺失时回退代码内默认值）；RRF 权重/k/fetch 参数从 `retrieval.yaml` 读取
 - 新增：`GET /metrics`（Prometheus，prometheus-client）；请求日志中间件（request_id + 耗时 + 指标）；`infra/cache/redis_client.py` 单例
 - 依赖新增：`pyyaml`、`prometheus-client`（pyproject.toml 与 requirements.txt 同步）；`package-data` 补 `config/*.yaml`（wheel 打包不丢 yaml 配置）
-- 依赖安装（uv）：创建 `.venv`（CPython 3.12.12）+ 全量依赖及 dev extras 安装完成（含 `pydantic-settings==2.15.0`、`python-dotenv==1.2.3`，P1-1/P1-2 顺带解决）；冒烟通过：`import docs_seeker.app` OK、`GET /`、`GET /metrics` 200、`POST /v1/chat`（注入拦截）正常、中间件 request_id 日志正常
+- 依赖安装（uv）：创建 `.venv`（CPython 3.12.12）+ 全量依赖及 dev extras 安装完成（含 `pydantic-settings==2.15.0`、`python-dotenv==1.2.3`，P1-1/P1-2 顺带解决）；冒烟通过：`import docs_seeker.api.main` OK、`GET /`、`GET /metrics` 200、`POST /v1/chat`（注入拦截）正常、中间件 request_id 日志正常
   - 注：uv 构建 sdist 时需临时目录 chmod 权限，DSH workspace-write 沙箱会拦截（WinError 5），须以完整文件系统权限运行安装；`.uv-cache/` 已加入 .gitignore
 - 语义缓存修复（P1-3/P1-4）：`array('f')` 字节编码、`doc["sources"]` 用 `[]` 访问、KNN `dialect=2`、索引维度动态化 + 漂移自愈；新增 `SEMANTIC_CACHE_ENABLED` 环境变量开关（默认开启，`.env.example` 已注释说明）；新增 `tests/test_semantic_cache.py`（5 例全过）；顺手修 P2-9（Settings 改用 `SettingsConfigDict`）
 - 前端对接（client 仓库，独立 git）：新增 `GET /v1/stats` 只读指标端点（语义缓存 + LLM 网关统计，供前端看板）；修复 `_require_dim` 空文本探测 bug（百炼拒绝空 input，改用"维度探测"，实测 text-embedding-v4 = 1024 维）
@@ -43,42 +43,38 @@
 - 未纳入本次范围（按清单后续修）：P1-1/P1-2 依赖缺失、P1-3 语义缓存 bytes、P1-4 缓存维度、P2 系列等
 - 新发现问题：BM25 结果无 id → /chat 去重坍缩，见 P2-12
 - 依赖单一来源（P3-3）：删除 `requirements.txt`；Dockerfile 迁移到 uv（`python:3.12-slim` 基础镜像 + 构建期 `pip install uv` 引导工具，依赖安装用 `uv sync --frozen --no-dev`）；注：ghcr.io 官方 uv 镜像国内网络拉取失败，故弃用；未实机 docker build 验证
+- 二次结构重构（目标架构对齐，行为零变化）：`app.py` → `api/main.py`（uvicorn 入口 `docs_seeker.api.main:app`）；`config/` + `infra/{observability,security}` → `core/`（config.py/logging.py/metrics.py/security.py，yaml 并入 core/）；`domain/entities/` → `domain/models/`；`application/services` + `application/pipelines` → `domain/services/`（含 rag_pipeline）；`retrieval/` → `infrastructure/retrieval/`；`infra/` → `infrastructure/`（`vector_store/` → `database/`）；`api/routes/v1/` 拍平为 `api/routes/`（`/v1` 前缀保留在聚合处）；所有 import 同步更新；工程化：ruff/mypy 配置 + dev extras（ruff/mypy 入 uv.lock）、路由 async→def（线程池）、新增 guard/composite/bm25/usage 单元测试（总计 27 例）；测试重组为 `tests/unit/` + `tests/integration/` + `conftest.py`
 
 ### 2.1 实际目录结构（与 README 一致，重构后）
 
 ```
 src/docs_seeker/
-├── app.py                      # FastAPI 入口（lifespan/CORS/root，含 GET /metrics）
-├── config/                     # 配置管理
-│   ├── __init__.py             # 导出 settings / prompts / retrieval_config（yaml 加载）
-│   ├── settings.py             # Pydantic Settings（环境变量）
-│   ├── prompts.yaml            # Prompt 模板（generator / query_decomposer）
-│   └── retrieval.yaml          # 检索策略（RRF 权重/k、fetch 参数）
-├── domain/                     # 领域层（核心实体 + 接口定义）
-│   ├── entities/               # Chunk / Document / Query
-│   └── interfaces/             # Retriever / EmbeddingProvider / LLMProvider
-├── retrieval/                  # 检索策略实现（原 domain/ 迁移）
-│   ├── dense_retriever.py      # 语义检索（Milvus）
-│   ├── bm25_retriever.py       # BM25 稀疏检索
-│   ├── summary_retriever.py    # 摘要引导检索
-│   ├── composite_retriever.py  # 多路融合（RRF）
-│   ├── query_decomposer.py     # 查询分解
-│   └── hybrid_router.py        # BM25 路由（尚未接线）
-├── application/                # 应用层（业务编排）
-│   ├── services/               # chat_service / search_service / generator
-│   └── pipelines/              # rag_pipeline.py（RAG 完整流程）
-├── infra/                      # 基础设施层（外部依赖实现）
-│   ├── vector_store/           # milvus_client.py（只读）
-│   ├── cache/                  # redis_client.py + semantic_cache.py
-│   ├── llm/                    # gateway.py（重试/熔断/降级）
-│   ├── embedding/              # embedder.py（查询向量化）
-│   └── security/               # guard.py（输入/输出护栏）
-├── api/                        # HTTP 层
-│   ├── routes/v1/              # chat.py / retrieve.py / health.py
-│   ├── schemas/                # request.py / response.py
-│   ├── deps.py                 # 单例依赖注入
-│   └── middleware.py           # 请求日志 + 指标中间件
-└── utils/                      # logger.py（结构化日志）/ metrics.py（Prometheus）
+├── api/                          # 接口层（HTTP 适配）
+│   ├── main.py                   # FastAPI 应用实例 + 中间件 + lifespan（uvicorn 入口）
+│   ├── deps.py                   # 依赖注入组装点（单例管理）
+│   ├── middleware.py             # 请求日志 + 指标中间件
+│   ├── routes/                   # 路由（文件拍平，对外保留 /v1 前缀）
+│   │   ├── __init__.py           # v1 路由聚合
+│   │   ├── chat.py / retrieve.py / health.py
+│   │   └── stats.py / milvus.py / usage.py
+│   └── schemas/                  # request.py / response.py
+├── core/                         # 跨模块共享
+│   ├── config.py                 # Pydantic Settings + yaml 加载（settings/prompts/retrieval_config）
+│   ├── logging.py                # 结构化日志（loguru）
+│   ├── metrics.py                # Prometheus 指标
+│   ├── security.py               # 安全护栏（输入注入检测 / 输出脱敏）
+│   ├── prompts.yaml / retrieval.yaml
+├── domain/                       # 核心业务层
+│   ├── models/                   # Chunk / Document / Query
+│   ├── services/                 # chat_service / search_service / generator / rag_pipeline / top_warmup
+│   └── interfaces/               # Retriever / EmbeddingProvider / LLMProvider
+└── infrastructure/               # 基础设施层（外部依赖实现）
+    ├── database/                 # milvus_client.py（只读）
+    ├── cache/                    # redis_client.py + semantic_cache.py
+    ├── llm/                      # gateway.py（重试/熔断/降级）
+    ├── embedding/                # embedder.py（查询向量化）
+    ├── retrieval/                # dense/bm25/summary/composite/query_decomposer/hybrid_router
+    └── usage/                    # tracker.py（RAG 使用统计）+ __init__.py（兼容导出）
 ```
 
 > 结论：README 目录树与实际代码已对齐（重构落地）。README 声称但尚未实现的部分仅剩：认证/限流中间件（P3-4）、HybridRouter 接线（P2-3）。
@@ -107,7 +103,7 @@ src/docs_seeker/
 
 ## 3. 遗留问题清单
 
-> 路径对应说明：重构后旧路径已迁移 —— `domain/*_retriever.py` → `retrieval/`；`infra/milvus_store.py` → `infra/vector_store/milvus_client.py`；`infra/semantic_cache.py` → `infra/cache/semantic_cache.py`；`infra/llm_gateway.py` → `infra/llm/gateway.py`；`infra/embedder.py` → `infra/embedding/embedder.py`；`infra/guard.py` → `infra/security/guard.py`；`api/routes.py` → `api/routes/v1/*.py`；`api/schemas.py` → `api/schemas/{request,response}.py`；`config/config.py` → `config/settings.py`；`domain/generator.py` → `application/services/generator.py`
+> 路径对应说明：重构后旧路径已迁移 —— `domain/*_retriever.py` → `infrastructure/retrieval/`；`infra/milvus_store.py` → `infrastructure/database/milvus_client.py`；`infra/semantic_cache.py` → `infrastructure/cache/semantic_cache.py`；`infra/llm_gateway.py` → `infrastructure/llm/gateway.py`；`infra/embedder.py` → `infrastructure/embedding/embedder.py`；`infra/guard.py` → `core/security.py`；`infra/usage_tracker.py` → `infrastructure/usage/tracker.py`；`api/routes.py` → `api/routes/*.py`（v1 拍平，前缀保留）；`api/schemas.py` → `api/schemas/{request,response}.py`；`config/config.py` → `core/config.py`；`domain/generator.py` → `domain/services/generator.py`；`application/*` → `domain/services/`
 
 ### 3.1 🔴 P1 阻断级（装不上 / 启动失败 / 核心功能失效）
 
@@ -142,7 +138,7 @@ src/docs_seeker/
 | # | 问题 | 位置 | 影响 |
 |---|---|---|---|
 | P3-1 | 零测试：tests/ 为空，核心纯逻辑（RRF/BM25/guard/脱敏）无保障 | `tests/` | 修复无回归防线 |
-| P3-2 | langfuse 声明未使用 | `pyproject.toml`、`.env.example` | 依赖冗余；`utils/logger.py`、`utils/metrics.py` 与 `GET /metrics` 已随重构落地（部分解决） |
+| P3-2 | langfuse 声明未使用 | `pyproject.toml`、`.env.example` | 依赖冗余；`infra/observability/logger.py`、`infra/observability/metrics.py` 与 `GET /metrics` 已随重构落地（部分解决） |
 | P3-3 | ~~依赖清单双份维护（pyproject + requirements.txt 内容重复）~~ | `Dockerfile`、`requirements.txt` | ✅ 已解决：删除 `requirements.txt`，Dockerfile 迁移到 uv（`python:3.12-slim` + 构建期 `pip install uv`，依赖安装 `uv sync --frozen`），pyproject.toml + uv.lock 单一正源 |
 | P3-4 | 无认证/限流中间件 | api 层 | 请求日志中间件（request_id + 耗时 + 指标）已落地；认证/限流仍未实现 |
 | P3-5 | 其他死代码：`Embedder.get_embeddings_batch/reset`、`SemanticCache.clear/stats`、`MilvusStore.count` 均无调用方 | 对应文件 | 清理或接线（如暴露 metrics 端点） |
@@ -158,7 +154,7 @@ src/docs_seeker/
 ### Phase 0 — 可运行性修复（P1，做完能装、能启动、缓存可用）
 
 - [x] **P1-1** 在 `pyproject.toml`（及 `requirements.txt`）补 `pydantic-settings>=2.0.0`
-  - 验收：✅ 通过（uv 安装 `pydantic-settings==2.15.0`；`import docs_seeker.app` 无 ImportError；TestClient 冒烟 OK）
+  - 验收：✅ 通过（uv 安装 `pydantic-settings==2.15.0`；`import docs_seeker.api.main` 无 ImportError；TestClient 冒烟 OK）
 - [x] **P1-2** 显式补 `python-dotenv>=1.0.0`（与 P1-1 同批，实际安装 1.2.3）
 - [x] **P1-3** 修复 `infra/cache/semantic_cache.py` 三处：① `array('f', query_embedding).tobytes()` 编码；② `doc["sources"]` 用 `[]` 访问；③ KNN 加 `dialect=2`
   - 验收：✅ 通过（`tests/test_semantic_cache.py` 5 例全过，覆盖编码/开关/dialect/命中/维度漂移）
@@ -187,7 +183,7 @@ src/docs_seeker/
 ### Phase 2 — 工程化（P3）
 
 - [ ] **P3-1** 补最小测试集：`test_guard.py`（注入/脱敏/误杀回归）、`test_bm25.py`（建索引/检索/刷新）、`test_composite.py`（RRF 融合/去重/权重）、`test_semantic_cache.py`（mock Redis + 修复后的向量编码）；pytest 跑绿
-- [ ] **P3-2** 移除 langfuse 依赖与 .env.example 变量，或真正接入（`utils/metrics.py` + `/metrics` 端点已落地；剩余：langfuse 清理/接线、LLM 调用与检索延迟指标接入，数据源已具备：LLMGateway.stats、SemanticCache.stats）
+- [ ] **P3-2** 移除 langfuse 依赖与 .env.example 变量，或真正接入（`infra/observability/metrics.py` + `/metrics` 端点已落地；剩余：langfuse 清理/接线、LLM 调用与检索延迟指标接入，数据源已具备：LLMGateway.stats、SemanticCache.stats）
 - [x] **P3-3** 依赖单一来源：已删 `requirements.txt`，Dockerfile 迁移到 uv（`uv sync --frozen`），pyproject.toml + uv.lock 为唯一正源
 - [ ] **P3-4** 补中间件（日志 request_id 已落地；剩余：限流、鉴权如 API Key）
 - [ ] **P3-5** 死代码清理或接线（见 3.3 P3-5）
@@ -199,7 +195,7 @@ src/docs_seeker/
 
 ## 5. 回归与验收基线
 
-- 启动冒烟：`uvicorn docs_seeker.app:app` 启动无异常日志；`GET /`、`GET /v1/health`、`GET /metrics` 返回 200
+- 启动冒烟：`uvicorn docs_seeker.api.main:app` 启动无异常日志；`GET /`、`GET /v1/health`、`GET /metrics` 返回 200
 - 链路冒烟：`POST /v1/retrieve` 返回带 `chapter/source` 的文档；`POST /v1/chat` 返回 answer + sources
 - 缓存验证：同一问题连续问两次，第二次响应 `cached=true`
 - 每次 Phase 完成后全量跑 pytest + 上述冒烟，再进入下一 Phase
@@ -226,7 +222,7 @@ src/docs_seeker/
 
 ### 6.3 方案设计
 
-**① 记录层（`infra/usage_tracker.py` 扩展）**
+**① 记录层（`infra/usage/` 扩展）**
 - `record()` 增加 `question` 参数（chat_service 传入）；归一化后 `ZINCRBY rag:usage:top 1 <问题>`
 - Redis 不可用时降级跳过（与现 usage 一致）
 
