@@ -1,4 +1,5 @@
 """docs-seeker - 查询实体"""
+
 from dataclasses import dataclass, field
 
 

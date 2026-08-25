@@ -2,6 +2,7 @@
 docs-seeker - 向量化模块（只读）
 仅提供查询向量化，不含索引构建（入库由 doc-kit 负责）
 """
+
 from loguru import logger
 from openai import OpenAI
 

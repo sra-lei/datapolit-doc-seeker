@@ -1,4 +1,5 @@
 """docs-seeker - /v1/milvus/stats 路由（Milvus 集合级监控，只读）"""
+
 from fastapi import APIRouter
 
 from docs_seeker.api.schemas import (

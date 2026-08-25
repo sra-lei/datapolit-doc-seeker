@@ -1,4 +1,5 @@
 """docs-seeker - 检索器抽象接口"""
+
 from abc import ABC, abstractmethod
 
 from docs_seeker.domain.models.chunk import Chunk

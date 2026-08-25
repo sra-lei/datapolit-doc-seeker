@@ -2,6 +2,7 @@
 docs-seeker - LLM 网关
 提供：重试、超时、熔断、降级、统一调用入口
 """
+
 import os
 import time
 from enum import Enum
@@ -84,7 +85,9 @@ class LLMGateway(LLMProvider):
                 return self._try_fallback(messages, max_tokens, temperature, stream)
             raise AllModelsFailedError("熔断器已打开，且无备用模型")
         try:
-            result = self._call_with_retry(self.primary_client, self.primary_model, messages, max_tokens, temperature, stream)
+            result = self._call_with_retry(
+                self.primary_client, self.primary_model, messages, max_tokens, temperature, stream
+            )
             self.success_calls += 1
             self.circuit_breaker.failure_count = 0
             return result
@@ -101,18 +104,27 @@ class LLMGateway(LLMProvider):
             raise AllModelsFailedError(f"主模型失败且无备用: {e}") from e
 
     def _try_fallback(self, messages, max_tokens, temperature, stream):
-        return self._call_with_retry(self.fallback_client, self.fallback_model, messages, max_tokens, temperature, stream)
+        return self._call_with_retry(
+            self.fallback_client, self.fallback_model, messages, max_tokens, temperature, stream
+        )
 
     def _call_with_retry(self, client, model, messages, max_tokens, temperature, stream, max_retries=3):
         last_error = None
         for attempt in range(max_retries + 1):
             try:
-                return client.chat.completions.create(model=model, messages=messages, max_tokens=max_tokens, temperature=temperature, stream=stream, timeout=15)
+                return client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    stream=stream,
+                    timeout=15,
+                )
             except Exception as e:
                 last_error = e
                 if attempt < max_retries:
-                    wait = 2 ** attempt
-                    logger.warning(f"重试 {attempt+1}/{max_retries}，等待 {wait}s: {e}")
+                    wait = 2**attempt
+                    logger.warning(f"重试 {attempt + 1}/{max_retries}，等待 {wait}s: {e}")
                     time.sleep(wait)
                 else:
                     raise last_error from None

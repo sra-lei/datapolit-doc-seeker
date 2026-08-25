@@ -1,4 +1,5 @@
 """docs-seeker - /v1/stats 路由（只读运行指标，供前端看板展示）"""
+
 from fastapi import APIRouter
 
 from docs_seeker.api.schemas import CacheStats, LLMStats, StatsResponse

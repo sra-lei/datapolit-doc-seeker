@@ -1,4 +1,5 @@
 """请求/响应模型"""
+
 from docs_seeker.api.schemas.request import ChatMessage, ChatRequest, RetrieveRequest
 from docs_seeker.api.schemas.response import (
     CacheStats,

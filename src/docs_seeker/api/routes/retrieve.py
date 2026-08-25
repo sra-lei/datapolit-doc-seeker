@@ -1,4 +1,5 @@
 """docs-seeker - /v1/retrieve 路由"""
+
 from fastapi import APIRouter
 
 from docs_seeker.api.deps import get_search_service

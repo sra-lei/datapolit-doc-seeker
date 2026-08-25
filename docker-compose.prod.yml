@@ -36,6 +36,8 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       PYTHONDONTWRITEBYTECODE: "1"
+      # 生产环境：关闭 /docs、/redoc、/openapi.json
+      ENVIRONMENT: "production"
 
     # 健康检查：直接调本机 /v1/health，不依赖 curl（slim 没装）
     healthcheck:

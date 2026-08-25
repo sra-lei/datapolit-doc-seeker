@@ -19,6 +19,7 @@ build/
 .ruff_cache/
 .coverage
 htmlcov/
+.pre-commit-cache/
 
 # 运行时数据
 data/

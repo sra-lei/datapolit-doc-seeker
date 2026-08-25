@@ -1,4 +1,5 @@
 """docs-seeker - /v1/usage 路由（RAG 使用统计 + 热门问题 TopN）"""
+
 from fastapi import APIRouter, Query
 
 from docs_seeker.api.schemas import (

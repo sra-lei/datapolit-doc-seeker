@@ -1,4 +1,5 @@
 """docs-seeker - 依赖注入（组装点，管理全应用单例）"""
+
 from docs_seeker.domain.services.chat_service import ChatService
 from docs_seeker.domain.services.generator import Generator
 from docs_seeker.domain.services.search_service import SearchService

@@ -1,11 +1,10 @@
 """docs-seeker - Prometheus 指标"""
+
 from fastapi import Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
 # HTTP 指标（由 api/middleware.py 采集）
-http_requests_total = Counter(
-    "docs_seeker_http_requests_total", "HTTP 请求总数", ["method", "path", "status"]
-)
+http_requests_total = Counter("docs_seeker_http_requests_total", "HTTP 请求总数", ["method", "path", "status"])
 http_request_duration_seconds = Histogram(
     "docs_seeker_http_request_duration_seconds", "HTTP 请求耗时（秒）", ["method", "path"]
 )

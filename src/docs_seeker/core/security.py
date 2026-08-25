@@ -3,6 +3,7 @@ docs-seeker - 安全护栏
 输入侧：提示注入检测
 输出侧：敏感信息脱敏
 """
+
 import re
 
 INJECTION_PATTERNS = [
@@ -43,12 +44,12 @@ def check_injection(question: str) -> tuple[bool, str]:
 
 
 SENSITIVE_PATTERNS = [
-    (re.compile(r'\b[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]\b'), '身份证号'),
-    (re.compile(r'\b1[3-9]\d{9}\b'), '手机号'),
-    (re.compile(r'\b0\d{2,3}-?\d{7,8}\b'), '电话号'),
-    (re.compile(r'\b[\w.-]+@[\w.-]+\.\w+\b'), '邮箱'),
-    (re.compile(r'(?:月薪|年薪|薪资|工资|底薪)\s*\d{3,7}'), '薪资信息'),
-    (re.compile(r'\b\d{16,19}\b'), '疑似银行卡号'),
+    (re.compile(r"\b[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]\b"), "身份证号"),
+    (re.compile(r"\b1[3-9]\d{9}\b"), "手机号"),
+    (re.compile(r"\b0\d{2,3}-?\d{7,8}\b"), "电话号"),
+    (re.compile(r"\b[\w.-]+@[\w.-]+\.\w+\b"), "邮箱"),
+    (re.compile(r"(?:月薪|年薪|薪资|工资|底薪)\s*\d{3,7}"), "薪资信息"),
+    (re.compile(r"\b\d{16,19}\b"), "疑似银行卡号"),
 ]
 
 
@@ -59,7 +60,7 @@ def desensitize(text: str) -> tuple[str, list]:
         matches = pattern.findall(clean_text)
         if matches:
             found.append(f"{label} (共{len(matches)}处)")
-            clean_text = pattern.sub('***', clean_text)
+            clean_text = pattern.sub("***", clean_text)
     return clean_text, found
 
 

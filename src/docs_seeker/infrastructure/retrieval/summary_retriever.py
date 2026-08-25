@@ -2,6 +2,7 @@
 docs-seeker - 摘要引导检索（Summary-guided Retrieval）
 先检索摘要集合，找到相关章节后，再检索该章节的正文
 """
+
 from typing import Any
 
 from loguru import logger
@@ -73,8 +74,17 @@ class SummaryRetriever(Retriever):
             collection_name=self.collection_name,
             query_vector=query_vector,
             top_k=top_k,
-            output_fields=["text", "source", "pages", "chapter", "chapter_title",
-                           "section", "section_title", "article", "article_title"],
+            output_fields=[
+                "text",
+                "source",
+                "pages",
+                "chapter",
+                "chapter_title",
+                "section",
+                "section_title",
+                "article",
+                "article_title",
+            ],
         )
         chunks = [Chunk.from_dict(r) for r in results]
 

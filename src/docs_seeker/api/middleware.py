@@ -1,4 +1,5 @@
 """docs-seeker - API 中间件（请求日志 / 指标）"""
+
 import time
 import uuid
 
@@ -19,14 +20,11 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         duration = time.perf_counter() - start
 
         logger.info(
-            f"[{request_id}] {request.method} {request.url.path} -> {response.status_code} "
-            f"({duration * 1000:.1f}ms)"
+            f"[{request_id}] {request.method} {request.url.path} -> {response.status_code} ({duration * 1000:.1f}ms)"
         )
         response.headers["X-Request-ID"] = request_id
 
-        http_requests_total.labels(
-            method=request.method, path=request.url.path, status=response.status_code
-        ).inc()
+        http_requests_total.labels(method=request.method, path=request.url.path, status=response.status_code).inc()
         http_request_duration_seconds.labels(method=request.method, path=request.url.path).observe(duration)
 
         # RAG 使用统计埋点（仅 /v1/chat、/v1/retrieve；Redis 不可用时静默降级）

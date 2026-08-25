@@ -1,4 +1,5 @@
 """docs-seeker - 纯检索用例服务"""
+
 from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.infrastructure.retrieval.composite_retriever import CompositeRetriever
 

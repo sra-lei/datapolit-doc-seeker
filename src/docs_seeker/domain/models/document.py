@@ -1,4 +1,5 @@
 """docs-seeker - 文档实体（文档级信息）"""
+
 from dataclasses import dataclass, field
 
 

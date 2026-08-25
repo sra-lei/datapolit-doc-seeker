@@ -1,4 +1,5 @@
 """docs-seeker - /v1/health 路由"""
+
 from fastapi import APIRouter
 
 from docs_seeker.api.schemas import HealthResponse

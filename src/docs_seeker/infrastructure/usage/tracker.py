@@ -9,6 +9,7 @@ docs-seeker - RAG 使用统计（按用户维度，Redis 持久化）
   /v1/usage/top 返回热门问题 TopN（含语义缓存命中标记，供预热器与 ChatWidget 欢迎语）
 - Redis 不可用时静默降级：埋点跳过、查询返回空结构，不影响主流程
 """
+
 import re
 from typing import Any, cast
 
@@ -95,6 +96,7 @@ class UsageTracker:
             )
             # 函数内导入：避免中间件链路加载缓存模块（embedder/OpenAI）
             from docs_seeker.infrastructure.cache.semantic_cache import get_semantic_cache
+
             cache = get_semantic_cache()
 
             result = []
@@ -137,11 +139,13 @@ class UsageTracker:
                 uid_str = str(uid)
                 ut = int(redis.get(self._key("user", uid_str, "total")) or 0)
                 us = int(redis.get(self._key("user", uid_str, "success")) or 0)
-                user_list.append({
-                    "user_id": uid_str,
-                    "calls": ut,
-                    "success_rate": f"{us / ut:.1%}" if ut else "0.0%",
-                })
+                user_list.append(
+                    {
+                        "user_id": uid_str,
+                        "calls": ut,
+                        "success_rate": f"{us / ut:.1%}" if ut else "0.0%",
+                    }
+                )
             user_list.sort(key=lambda x: x["calls"], reverse=True)
 
             return {

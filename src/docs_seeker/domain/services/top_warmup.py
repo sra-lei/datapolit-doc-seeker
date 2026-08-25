@@ -8,6 +8,7 @@ docs-seeker - 热门问题预热器（P4）
 - 重复的注入检测/脱敏链路
 数据写入与 chat 路径保持一致的格式（CACHE_FIELDS + sanitize_output）。
 """
+
 import threading
 
 from loguru import logger
@@ -45,9 +46,7 @@ class TopQuestionWarmup:
             return
         self._thread = threading.Thread(target=self._loop, name="top-warmup", daemon=True)
         self._thread.start()
-        logger.info(
-            f"热门问题预热器已启动（每 {settings.top_warmup_interval_hours}h，Top{settings.top_warmup_size}）"
-        )
+        logger.info(f"热门问题预热器已启动（每 {settings.top_warmup_interval_hours}h，Top{settings.top_warmup_size}）")
 
     def stop(self) -> None:
         self._stop.set()
@@ -79,10 +78,7 @@ class TopQuestionWarmup:
                 try:
                     answer, confidence, chunks, _ = service.pipeline.run(question, top_k=10)
                     answer = sanitize_output(answer)
-                    source_dicts = [
-                        {k: v for k, v in chunk.to_dict().items() if k in CACHE_FIELDS}
-                        for chunk in chunks
-                    ]
+                    source_dicts = [{k: v for k, v in chunk.to_dict().items() if k in CACHE_FIELDS} for chunk in chunks]
                     service.cache.store(
                         question,
                         {"answer": answer, "confidence": confidence, "sources": source_dicts},

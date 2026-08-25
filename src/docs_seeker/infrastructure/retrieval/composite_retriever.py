@@ -1,6 +1,7 @@
 """
 docs-seeker - 多路检索融合编排（Reciprocal Rank Fusion）
 """
+
 import copy
 from typing import Any
 

@@ -2,6 +2,7 @@
 docs-seeker - 语义检索（Dense Retrieval）
 基于 Milvus 向量检索
 """
+
 from typing import Any
 
 from loguru import logger

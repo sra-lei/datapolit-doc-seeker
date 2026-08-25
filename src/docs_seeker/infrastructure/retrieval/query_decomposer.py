@@ -2,6 +2,7 @@
 docs-seeker - 查询分解
 将复杂问题分解为子问题，提高检索召回率
 """
+
 from loguru import logger
 
 from docs_seeker.core.config import prompts

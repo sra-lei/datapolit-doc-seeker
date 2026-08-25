@@ -1,4 +1,5 @@
 """docs-seeker - 向量化接口"""
+
 from abc import ABC, abstractmethod
 
 

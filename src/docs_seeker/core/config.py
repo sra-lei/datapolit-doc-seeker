@@ -2,6 +2,7 @@
 docs-seeker - 核心配置（pydantic-settings 环境变量 + yaml 资源加载）
 所有配置通过环境变量读取，禁止硬编码；prompts/retrieval 从同目录 yaml 加载。
 """
+
 from pathlib import Path
 
 import yaml
@@ -39,6 +40,8 @@ class Settings(BaseSettings):
 
     # 应用配置
     log_level: str = "INFO"
+    # 运行环境：development / production（production 下禁用 /docs、/redoc、/openapi.json）
+    environment: str = "development"
 
     # 热门问题 Top10（P4）：记录 + 预热语义缓存（ChatWidget 欢迎语用）
     top_warmup_enabled: bool = True

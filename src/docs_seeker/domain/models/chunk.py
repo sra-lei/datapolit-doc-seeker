@@ -1,4 +1,5 @@
 """docs-seeker - 文档块实体（检索返回的基本单元）"""
+
 from dataclasses import asdict, dataclass, field
 
 

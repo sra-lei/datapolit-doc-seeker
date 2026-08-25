@@ -1,4 +1,5 @@
 """docs-seeker - 问答用例服务"""
+
 from dataclasses import dataclass, field
 
 from loguru import logger
@@ -40,8 +41,9 @@ class ChatService:
         self.cache = cache or get_semantic_cache()
         self.usage_tracker = usage_tracker or get_usage_tracker()
 
-    def chat(self, question: str, history: list[dict] | None = None,
-             top_k: int = 10, use_cache: bool = True) -> ChatResult:
+    def chat(
+        self, question: str, history: list[dict] | None = None, top_k: int = 10, use_cache: bool = True
+    ) -> ChatResult:
         ok, reason = check_injection(question)
         if not ok:
             return ChatResult(answer=reason, confidence="low")

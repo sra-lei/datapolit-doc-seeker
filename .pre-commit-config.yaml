@@ -1,0 +1,15 @@
+# 提交前自动检查与格式化（ruff check --fix + ruff format）
+# 首次运行会自动下载 ruff-pre-commit 环境；在本仓库执行一次 `pre-commit install` 后生效
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+  # 密钥/隐私泄露扫描：提交前检查暂存内容里的硬编码密钥
+  # （gitleaks 官方 hook，默认 `protect --staged`；首次运行从源码构建，耗时较长）
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.29.1
+    hooks:
+      - id: gitleaks

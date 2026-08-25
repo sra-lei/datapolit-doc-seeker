@@ -12,6 +12,7 @@ docs-seeker - BM25 稀疏检索
   （statistics 调用，远便宜于全量 scan）做一次变更探测，文档数不一致才触发
   重建；doc-kit 入库后也可显式调用 refresh() 立即重建。
 """
+
 import math
 import threading
 import time
@@ -38,9 +39,9 @@ class BM25Retriever(Retriever):
     _shared_avgdl: float = 0.0
     _shared_doc_count: int = 0
     _shared_built: bool = False
-    _shared_built_at: float = 0.0           # 上次构建时间（monotonic）
-    _shared_last_checked_at: float = 0.0    # 上次新鲜度探测时间（monotonic）
-    _shared_lock = threading.Lock()         # 串行化首次构建 / 刷新
+    _shared_built_at: float = 0.0  # 上次构建时间（monotonic）
+    _shared_last_checked_at: float = 0.0  # 上次新鲜度探测时间（monotonic）
+    _shared_lock = threading.Lock()  # 串行化首次构建 / 刷新
 
     def __init__(self):
         self.milvus = get_milvus_store()

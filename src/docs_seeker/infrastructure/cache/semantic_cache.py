@@ -2,6 +2,7 @@
 docs-seeker - 语义缓存
 基于 Redis Stack 向量搜索，按问题相似度匹配缓存
 """
+
 import hashlib
 import json
 from array import array
@@ -91,7 +92,8 @@ class SemanticCache:
             TextField("$.answer", no_stem=True, as_name="answer"),
             TextField("$.confidence", no_stem=True, as_name="confidence"),
             VectorField(
-                "$.embedding", "FLAT",
+                "$.embedding",
+                "FLAT",
                 {"TYPE": "FLOAT32", "DIM": dim, "DISTANCE_METRIC": "COSINE"},
                 as_name="embedding",
             ),

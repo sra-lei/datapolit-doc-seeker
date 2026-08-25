@@ -1,4 +1,5 @@
 """docs-seeker - 答案生成器（应用服务）"""
+
 from loguru import logger
 
 from docs_seeker.core.config import prompts
@@ -21,7 +22,9 @@ class Generator:
         # 允许注入 LLM（deps 组装点传入）；缺省时走全局网关单例
         self.llm = llm or get_llm_gateway()
 
-    def generate(self, question: str, docs: list[Chunk], conversation_history: list[dict] | None = None) -> tuple[str, str]:
+    def generate(
+        self, question: str, docs: list[Chunk], conversation_history: list[dict] | None = None
+    ) -> tuple[str, str]:
         context_parts = []
         for i, doc in enumerate(docs):
             context_parts.append(

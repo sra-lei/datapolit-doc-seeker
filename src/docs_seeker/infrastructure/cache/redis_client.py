@@ -1,4 +1,5 @@
 """docs-seeker - Redis 基础客户端"""
+
 import redis
 
 from docs_seeker.core.config import settings

@@ -146,6 +146,20 @@ docker compose build
 docker compose up -d
 ```
 
+## 代码规范（提交前自动检查）
+
+提交钩子基于 [pre-commit](https://pre-commit.com)，自动执行 `ruff check --fix`、`ruff format`，并用 [gitleaks](https://github.com/gitleaks/gitleaks) 扫描暂存内容中的硬编码密钥（API Key / Token / 私钥等，配置见 `.pre-commit-config.yaml`）：
+
+```bash
+# 安装钩子（一次性，dev 依赖已通过 uv sync 安装）
+pre-commit install
+
+# 手动触发一次全量检查（首次运行需联网下载 ruff-pre-commit 环境，并从源码构建 gitleaks，耗时较长）
+pre-commit run --all-files
+```
+
+钩子安装后，每次 `git commit` 都会先检查/格式化改动文件并做密钥扫描；未通过则提交被拦截，修复后重新提交即可。若确有需要提交的测试占位密钥，可在 `.gitleaks.toml` 中配置 allowlist（勿把真实密钥加入）。
+
 ## 依赖
 
 - Milvus（只读，和 doc-kit 共享）

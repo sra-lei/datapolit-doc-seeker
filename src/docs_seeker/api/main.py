@@ -1,4 +1,5 @@
 """docs-seeker - FastAPI 应用入口"""
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -32,14 +33,22 @@ async def lifespan(app: FastAPI):
     logger.info("docs-seeker 已关闭")
 
 
+# 生产环境不暴露 API 文档（/docs、/redoc、/openapi.json）
+_docs_enabled = settings.environment.strip().lower() not in {"production", "prod"}
+
 app = FastAPI(
     title="docs-seeker",
     description="在线检索与问答微服务（语义/稀疏/摘要三路融合检索 + LLM 答案生成）",
     version="0.1.0",
     lifespan=lifespan,
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
 )
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
+)
 app.add_middleware(RequestLoggingMiddleware)
 app.include_router(router)
 

@@ -2,6 +2,7 @@
 docs-seeker - Milvus 只读客户端
 仅提供 search/query/count，不提供 create/insert/drop（入库由 doc-kit 负责）
 """
+
 from typing import Any
 
 from loguru import logger
@@ -47,8 +48,17 @@ class MilvusStore:
             [{id, distance, text, ...}, ...]
         """
         if output_fields is None:
-            output_fields = ["text", "source", "pages", "chapter", "chapter_title",
-                             "section", "section_title", "article", "article_title"]
+            output_fields = [
+                "text",
+                "source",
+                "pages",
+                "chapter",
+                "chapter_title",
+                "section",
+                "section_title",
+                "article",
+                "article_title",
+            ]
 
         try:
             return self._do_search(collection_name, query_vector, top_k, filter_expr, output_fields)
@@ -89,19 +99,21 @@ class MilvusStore:
         docs = []
         for hit in hits:
             entity = hit.get("entity", hit) if isinstance(hit, dict) else {}
-            docs.append({
-                "id": hit.get("id", ""),
-                "distance": hit.get("distance", 0.0),
-                "text": entity.get("text", ""),
-                "source": entity.get("source", ""),
-                "pages": entity.get("pages", ""),
-                "chapter": entity.get("chapter", ""),
-                "chapter_title": entity.get("chapter_title", ""),
-                "section": entity.get("section", ""),
-                "section_title": entity.get("section_title", ""),
-                "article": entity.get("article", ""),
-                "article_title": entity.get("article_title", ""),
-            })
+            docs.append(
+                {
+                    "id": hit.get("id", ""),
+                    "distance": hit.get("distance", 0.0),
+                    "text": entity.get("text", ""),
+                    "source": entity.get("source", ""),
+                    "pages": entity.get("pages", ""),
+                    "chapter": entity.get("chapter", ""),
+                    "chapter_title": entity.get("chapter_title", ""),
+                    "section": entity.get("section", ""),
+                    "section_title": entity.get("section_title", ""),
+                    "article": entity.get("article", ""),
+                    "article_title": entity.get("article_title", ""),
+                }
+            )
         return docs
 
     def query_by_chapter(
@@ -123,8 +135,17 @@ class MilvusStore:
             query_vector=[],  # 不按向量检索，按 filter
             top_k=top_k,
             filter_expr=filter_expr,
-            output_fields=["text", "source", "pages", "chapter", "chapter_title",
-                           "section", "section_title", "article", "article_title"],
+            output_fields=[
+                "text",
+                "source",
+                "pages",
+                "chapter",
+                "chapter_title",
+                "section",
+                "section_title",
+                "article",
+                "article_title",
+            ],
         )
 
     def get_all_documents(self, collection_name: str, limit: int = 10000) -> list[dict[str, Any]]:
@@ -133,8 +154,17 @@ class MilvusStore:
             results = self.client.query(
                 collection_name=collection_name,
                 filter="",
-                output_fields=["text", "source", "pages", "chapter", "chapter_title",
-                               "section", "section_title", "article", "article_title"],
+                output_fields=[
+                    "text",
+                    "source",
+                    "pages",
+                    "chapter",
+                    "chapter_title",
+                    "section",
+                    "section_title",
+                    "article",
+                    "article_title",
+                ],
                 limit=limit,
             )
             return results if results else []

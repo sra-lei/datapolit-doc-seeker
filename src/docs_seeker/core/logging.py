@@ -1,4 +1,5 @@
 """docs-seeker - 结构化日志（loguru）"""
+
 import sys
 
 from loguru import logger
