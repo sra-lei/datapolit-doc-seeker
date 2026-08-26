@@ -53,11 +53,6 @@ app.add_middleware(RequestLoggingMiddleware)
 app.include_router(router)
 
 
-@app.get("/")
-async def root():
-    return {"service": "docs-seeker", "version": "0.1.0", "docs": "/docs"}
-
-
 @app.get("/metrics")
 async def metrics():
     return metrics_response()
