@@ -33,6 +33,7 @@ class QueryDecomposer:
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=200,
                 temperature=0.1,
+                name="query-decompose",
             )
             content = response.choices[0].message.content.strip()
             sub_questions = [q.strip() for q in content.split("\n") if q.strip()]

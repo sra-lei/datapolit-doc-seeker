@@ -15,7 +15,7 @@
 - **向量化**：阿里百炼 text-embedding-v4（OpenAI 兼容协议）
 - **缓存**：Redis Stack 向量语义缓存（按问题相似度命中）
 - **安全**：输入提示注入检测 + 输出敏感信息脱敏（guard.py）
-- **技术栈**：Python 3.10+ / FastAPI / pydantic v2 / pymilvus / redis / jieba / openai / loguru / langfuse(未用)
+- **技术栈**：Python 3.10+ / FastAPI / pydantic v2 / pymilvus / redis / jieba / openai / loguru / langfuse(链路追踪已接入，见 2.5)
 
 **数据流**：`POST /v1/chat` → 注入检测 → 语义缓存查询 → LLM 查询分解 → 三路检索(RRF 融合) → LLM 生成 → 脱敏 → 写缓存
 
@@ -83,7 +83,6 @@ src/docs_seeker/
 
 - `pyproject.toml` + `uv.lock`（唯一正源，`requirements.txt` 已删除，镜像构建同样走 uv）：fastapi / uvicorn / loguru / pydantic / pymilvus / redis / jieba / openai / httpx / langfuse；dev extras：pytest、pytest-asyncio
 - **缺失**：`pydantic-settings`（config.py 直接 import，未声明 → 全新环境 ImportError）、`python-dotenv`（llm_gateway.py import，仅靠 pydantic-settings 传递安装）
-- **多余**：`langfuse`（声明且 .env.example 有变量，代码零引用）
 - **本次重构新增**：`pyyaml`（config yaml 加载）、`prometheus-client`（/metrics 端点）
 - 本机环境无可用 Python 解释器（`python` 为 WindowsApps 占位符、`py` 不存在），未能做实际 import 验证
 
@@ -98,6 +97,17 @@ src/docs_seeker/
 - 仅 1 个 commit（initial commit）
 - 工作区有未提交改动：README 的目标架构改写 + 本次完整目录重构（见 2.0），建议作为一次 commit 提交
 - `tests/` 目录存在但**完全为空**；无 CI、无 lint/type 配置（.gitignore 里预留了 .mypy_cache/.ruff_cache 但无对应配置）
+
+### 2.5 Langfuse 链路追踪（P3-2 已接入）
+
+遵循 [langfuse/skills](https://github.com/langfuse/skills) 官方 Agent Skill 与[追踪最佳实践](https://langfuse.com/docs/observability/best-practices)实现：
+
+- **接入点**：`infrastructure/tracing.py`（环境变量加载 + `tracing_enabled()` / `shutdown_langfuse()`）
+- **LLM 调用**：`infrastructure/llm/gateway.py`、`infrastructure/embedding/embedder.py` 改用 `langfuse.openai.OpenAI` drop-in 包装，自动记录 generation/embedding 观测（模型名、token 用量、耗时、错误）；流式开启 `stream_options.include_usage` 采集 token
+- **流程观测**：`ChatService.chat/chat_stream`（根 trace `chat-response`）、`RAGPipeline.prepare`（`retrieve-context`）、三路检索器与 RRF 融合（`retriever` 类型）、语义缓存查询（`retriever` 类型）
+- **属性**：`session_id`/`user_id`（ChatRequest 新增可选字段）→ propagate_attributes 传播；tags=`chat`；environment 取 `ENVIRONMENT`；metadata 含路由
+- **降级**：未配置 `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` 时客户端自动 no-op，不影响业务；测试环境 `LANGFUSE_TRACING_ENABLED=false`（tests/conftest.py）
+- **验证**：已端到端跑通并审计真实 trace（chat 非流式 + 流式各一条），结构符合基线要求（命名/类型/层级/输入输出/用量）
 
 ---
 
@@ -138,7 +148,7 @@ src/docs_seeker/
 | # | 问题 | 位置 | 影响 |
 |---|---|---|---|
 | P3-1 | 零测试：tests/ 为空，核心纯逻辑（RRF/BM25/guard/脱敏）无保障 | `tests/` | 修复无回归防线 |
-| P3-2 | langfuse 声明未使用 | `pyproject.toml`、`.env.example` | 依赖冗余；`infra/observability/logger.py`、`infra/observability/metrics.py` 与 `GET /metrics` 已随重构落地（部分解决） |
+| P3-2 | ~~langfuse 声明未使用~~ | `pyproject.toml`、`.env.example` | ✅ 已解决：chat 全链路 Langfuse 追踪已接入（见 2.5），未配置时自动 no-op |
 | P3-3 | ~~依赖清单双份维护（pyproject + requirements.txt 内容重复）~~ | `Dockerfile`、`requirements.txt` | ✅ 已解决：删除 `requirements.txt`，Dockerfile 迁移到 uv（`python:3.12-slim` + 构建期 `pip install uv`，依赖安装 `uv sync --frozen`），pyproject.toml + uv.lock 单一正源 |
 | P3-4 | 无认证/限流中间件 | api 层 | 请求日志中间件（request_id + 耗时 + 指标）已落地；认证/限流仍未实现 |
 | P3-5 | 其他死代码：`Embedder.get_embeddings_batch/reset`、`SemanticCache.clear/stats`、`MilvusStore.count` 均无调用方 | 对应文件 | 清理或接线（如暴露 metrics 端点） |
@@ -183,7 +193,7 @@ src/docs_seeker/
 ### Phase 2 — 工程化（P3）
 
 - [ ] **P3-1** 补最小测试集：`test_guard.py`（注入/脱敏/误杀回归）、`test_bm25.py`（建索引/检索/刷新）、`test_composite.py`（RRF 融合/去重/权重）、`test_semantic_cache.py`（mock Redis + 修复后的向量编码）；pytest 跑绿
-- [ ] **P3-2** 移除 langfuse 依赖与 .env.example 变量，或真正接入（`infra/observability/metrics.py` + `/metrics` 端点已落地；剩余：langfuse 清理/接线、LLM 调用与检索延迟指标接入，数据源已具备：LLMGateway.stats、SemanticCache.stats）
+- [x] **P3-2** langfuse 真正接入：chat 全链路 Langfuse 追踪（见 2.5：`infrastructure/tracing.py` + `@observe` 观测 + langfuse.openai 包装 LLM/向量化；未配置 LANGFUSE_* 时自动降级 no-op；测试环境经 `LANGFUSE_TRACING_ENABLED=false` 禁用上报）；已端到端验证并审计真实 trace
 - [x] **P3-3** 依赖单一来源：已删 `requirements.txt`，Dockerfile 迁移到 uv（`uv sync --frozen`），pyproject.toml + uv.lock 为唯一正源
 - [ ] **P3-4** 补中间件（日志 request_id 已落地；剩余：限流、鉴权如 API Key）
 - [ ] **P3-5** 死代码清理或接线（见 3.3 P3-5）

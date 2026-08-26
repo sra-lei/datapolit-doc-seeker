@@ -1,5 +1,6 @@
 """docs-seeker - RAG 完整流程编排"""
 
+from langfuse import get_client, observe
 from loguru import logger
 
 from docs_seeker.domain.models.chunk import Chunk
@@ -22,18 +23,20 @@ class RAGPipeline:
         self.decomposer = decomposer or QueryDecomposer()
         self.generator = generator or Generator()
 
-    def run(
+    @observe(name="retrieve-context", capture_input=False, capture_output=False)
+    def prepare(
         self,
         question: str,
         top_k: int = 10,
         use_summary: bool = True,
         conversation_history: list[dict] | None = None,
-    ) -> tuple[str, str, list[Chunk], list[str]]:
-        """执行完整 RAG 流程
+    ) -> tuple[list[Chunk], list[str]]:
+        """检索准备：查询分解 → 多路检索 → 去重。
 
         Returns:
-            (answer, confidence, deduped_chunks, sub_questions)
+            (deduped_chunks, sub_questions)
         """
+        get_client().update_current_span(input={"question": question, "top_k": top_k, "use_summary": use_summary})
         q: Query = self.decomposer.decompose(question)
         sub_questions = q.sub_queries or [question]
 
@@ -51,6 +54,24 @@ class RAGPipeline:
                 seen.add(chunk_id)
                 deduped.append(chunk)
         deduped = deduped[:top_k]
+        get_client().update_current_span(output={"chunks": len(deduped), "sub_questions": sub_questions})
+        return deduped, sub_questions
+
+    def run(
+        self,
+        question: str,
+        top_k: int = 10,
+        use_summary: bool = True,
+        conversation_history: list[dict] | None = None,
+    ) -> tuple[str, str, list[Chunk], list[str]]:
+        """执行完整 RAG 流程
+
+        Returns:
+            (answer, confidence, deduped_chunks, sub_questions)
+        """
+        deduped, sub_questions = self.prepare(
+            question, top_k=top_k, use_summary=use_summary, conversation_history=conversation_history
+        )
 
         answer, confidence = self.generator.generate(question, deduped, conversation_history)
         logger.info(f"RAG 流程完成: sub_questions={len(sub_questions)} deduped={len(deduped)} confidence={confidence}")

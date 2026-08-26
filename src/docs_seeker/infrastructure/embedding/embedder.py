@@ -1,10 +1,12 @@
 """
 docs-seeker - 向量化模块（只读）
 仅提供查询向量化，不含索引构建（入库由 doc-kit 负责）
+OpenAI 客户端使用 langfuse.openai 的 drop-in 包装，向量化调用自动记录为
+embedding 观测（模型名、token 用量），纳入 Langfuse 链路。
 """
 
+from langfuse.openai import OpenAI
 from loguru import logger
-from openai import OpenAI
 
 from docs_seeker.core.config import settings
 from docs_seeker.domain.interfaces.embedder import EmbeddingProvider
@@ -34,14 +36,18 @@ class Embedder(EmbeddingProvider):
 
     def get_embedding(self, text: str) -> list[float]:
         text = text.replace("\n", " ")
-        response = self.embedding_client.embeddings.create(model=self.embedding_model, input=text)
+        response = self.embedding_client.embeddings.create(
+            model=self.embedding_model, input=text, name="embedding-query"
+        )
         return response.data[0].embedding
 
     def get_embeddings_batch(self, texts: list[str], batch_size: int = 20) -> list[list[float]]:
         all_embeddings: list[list[float]] = []
         for i in range(0, len(texts), batch_size):
             batch = [t.replace("\n", " ") for t in texts[i : i + batch_size]]
-            response = self.embedding_client.embeddings.create(model=self.embedding_model, input=batch)
+            response = self.embedding_client.embeddings.create(
+                model=self.embedding_model, input=batch, name="embedding-query-batch"
+            )
             all_embeddings.extend([d.embedding for d in response.data])
         return all_embeddings
 

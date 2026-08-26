@@ -14,6 +14,7 @@ class LLMProvider(ABC):
         max_tokens: int = 600,
         temperature: float = 0.3,
         stream: bool = False,
+        name: str = "llm-call",
     ) -> Any:
         """调用 LLM 生成
 
@@ -22,6 +23,7 @@ class LLMProvider(ABC):
             max_tokens: 最大生成 token 数
             temperature: 采样温度
             stream: 是否流式
+            name: Langfuse generation 观测名（稳定、动词开头，便于过滤/评估器定位）
 
         Returns:
             OpenAI 风格响应对象（response.choices[0].message.content）

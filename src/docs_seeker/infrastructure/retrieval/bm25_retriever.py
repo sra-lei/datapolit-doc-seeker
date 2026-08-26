@@ -20,6 +20,7 @@ from collections import Counter
 from typing import Any
 
 import jieba
+from langfuse import get_client, observe
 from loguru import logger
 
 from docs_seeker.core.config import settings
@@ -118,6 +119,7 @@ class BM25Retriever(Retriever):
 
     # ---------------- 检索 ----------------
 
+    @observe(name="retrieve-bm25", as_type="retriever", capture_input=False, capture_output=False)
     def search(self, query: str, top_k: int = 10, **kwargs: Any) -> list[Chunk]:
         """BM25 检索
 
@@ -128,6 +130,7 @@ class BM25Retriever(Retriever):
         Returns:
             按相关性降序的 Chunk 列表
         """
+        get_client().update_current_span(input={"query": query, "top_k": top_k})
         # 线程安全懒构建：已构建时仅一次加锁 + 标志判断，开销可忽略
         self.build_index()
         if not self._shared_built or not self._shared_docs:
@@ -179,4 +182,5 @@ class BM25Retriever(Retriever):
             chunk.score = score
             results.append(chunk)
         logger.info(f"BM25 检索完成: query='{query[:30]}...' top_k={top_k} hits={len(results)}")
+        get_client().update_current_span(output={"hits": len(results)})
         return results

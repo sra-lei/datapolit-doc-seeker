@@ -1,6 +1,8 @@
 """
 docs-seeker - LLM 网关
 提供：重试、超时、熔断、降级、统一调用入口
+已接入 Langfuse 链路追踪：OpenAI 客户端使用 langfuse.openai 的 drop-in 包装，
+自动把每次模型调用记录为 generation 观测（模型名、token 用量、耗时、错误）。
 """
 
 import os
@@ -9,8 +11,8 @@ from enum import Enum
 from threading import Lock
 
 from dotenv import load_dotenv
+from langfuse.openai import OpenAI
 from loguru import logger
-from openai import OpenAI
 
 from docs_seeker.core.config import settings
 from docs_seeker.domain.interfaces.llm import LLMProvider
@@ -78,15 +80,15 @@ class LLMGateway(LLMProvider):
         self.success_calls = 0
         self.fallback_calls = 0
 
-    def generate(self, messages: list, max_tokens: int = 600, temperature: float = 0.3, stream: bool = False):
+    def generate(self, messages: list, max_tokens: int = 600, temperature: float = 0.3, stream: bool = False, name: str = "llm-call"):
         self.total_calls += 1
         if self.circuit_breaker.state == CircuitState.OPEN:
             if self.fallback_client:
-                return self._try_fallback(messages, max_tokens, temperature, stream)
+                return self._try_fallback(messages, max_tokens, temperature, stream, name)
             raise AllModelsFailedError("熔断器已打开，且无备用模型")
         try:
             result = self._call_with_retry(
-                self.primary_client, self.primary_model, messages, max_tokens, temperature, stream
+                self.primary_client, self.primary_model, messages, max_tokens, temperature, stream, name
             )
             self.success_calls += 1
             self.circuit_breaker.failure_count = 0
@@ -95,7 +97,7 @@ class LLMGateway(LLMProvider):
             logger.error(f"主模型调用失败: {e}")
             if self.fallback_client:
                 try:
-                    result = self._try_fallback(messages, max_tokens, temperature, stream)
+                    result = self._try_fallback(messages, max_tokens, temperature, stream, name)
                     self.fallback_calls += 1
                     return result
                 except Exception as fb_e:
@@ -103,23 +105,30 @@ class LLMGateway(LLMProvider):
                     raise AllModelsFailedError("主模型和备用模型均失败") from fb_e
             raise AllModelsFailedError(f"主模型失败且无备用: {e}") from e
 
-    def _try_fallback(self, messages, max_tokens, temperature, stream):
+    def _try_fallback(self, messages, max_tokens, temperature, stream, name="llm-call"):
         return self._call_with_retry(
-            self.fallback_client, self.fallback_model, messages, max_tokens, temperature, stream
+            self.fallback_client, self.fallback_model, messages, max_tokens, temperature, stream, name
         )
 
-    def _call_with_retry(self, client, model, messages, max_tokens, temperature, stream, max_retries=3):
+    def _call_with_retry(self, client, model, messages, max_tokens, temperature, stream, name="llm-call", max_retries=3):
         last_error = None
+        call_kwargs: dict = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stream": stream,
+            "timeout": 15,
+            # Langfuse：为本次生成指定稳定名称（generation 观测名）
+            "name": name,
+        }
+        if stream:
+            # 流式场景开启 usage 上报，Langfuse 才能记录 token 用量与成本；
+            # OpenAI 会在最后一个 chunk（choices 为空）返回 usage，_extract_delta 已兼容空 choices。
+            call_kwargs["stream_options"] = {"include_usage": True}
         for attempt in range(max_retries + 1):
             try:
-                return client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    stream=stream,
-                    timeout=15,
-                )
+                return client.chat.completions.create(**call_kwargs)
             except Exception as e:
                 last_error = e
                 if attempt < max_retries:

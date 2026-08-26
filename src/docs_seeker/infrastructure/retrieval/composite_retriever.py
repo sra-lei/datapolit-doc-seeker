@@ -5,6 +5,7 @@ docs-seeker - 多路检索融合编排（Reciprocal Rank Fusion）
 import copy
 from typing import Any
 
+from langfuse import get_client, observe
 from loguru import logger
 
 from docs_seeker.core.config import retrieval_config
@@ -33,7 +34,10 @@ class CompositeRetriever(Retriever):
         self.fetch_factor = int(comp_cfg.get("fetch_factor", 3))
         self.max_fetch = int(comp_cfg.get("max_fetch", 30))
 
+    @observe(name="retrieve-multi-route", as_type="retriever", capture_input=False, capture_output=False)
     def search(self, query: str, top_k: int = 10, use_summary: bool = True, **kwargs: Any) -> list[Chunk]:
+        # Langfuse：检索观测只记录查询与结果规模，不捕获全量文档正文
+        get_client().update_current_span(input={"query": query, "top_k": top_k})
         fetch_k = min(top_k * self.fetch_factor, self.max_fetch)
         dense_results = self.dense.search(query, top_k=fetch_k)
         bm25_results = self.bm25.search(query, top_k=fetch_k)
@@ -74,4 +78,12 @@ class CompositeRetriever(Retriever):
             results.append(chunk)
 
         logger.info(f"RRF 融合: query='{query[:30]}...' final={len(results)}")
+        get_client().update_current_span(
+            output={
+                "final": len(results),
+                "dense": len(dense_results),
+                "bm25": len(bm25_results),
+                "summary": len(summary_results),
+            }
+        )
         return results

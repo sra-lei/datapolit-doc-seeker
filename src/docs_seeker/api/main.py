@@ -13,6 +13,7 @@ from docs_seeker.core.config import settings
 from docs_seeker.core.logging import setup_logging
 from docs_seeker.core.metrics import metrics_response
 from docs_seeker.domain.services.top_warmup import get_top_warmup
+from docs_seeker.infrastructure.tracing import shutdown_langfuse
 
 
 @asynccontextmanager
@@ -30,6 +31,8 @@ async def lifespan(app: FastAPI):
     get_top_warmup().start(service=get_chat_service())
     yield
     get_top_warmup().stop()
+    # 进程退出前冲刷并关闭 Langfuse 客户端（未配置时为 no-op）
+    shutdown_langfuse()
     logger.info("docs-seeker 已关闭")
 
 

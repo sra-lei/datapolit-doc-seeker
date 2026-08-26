@@ -5,6 +5,7 @@ docs-seeker - 摘要引导检索（Summary-guided Retrieval）
 
 from typing import Any
 
+from langfuse import get_client, observe
 from loguru import logger
 
 from docs_seeker.core.config import settings
@@ -29,6 +30,7 @@ class SummaryRetriever(Retriever):
         self.collection_name = settings.collection_name
         self.summary_collection_name = settings.summary_collection_name
 
+    @observe(name="retrieve-summary", as_type="retriever", capture_input=False, capture_output=False)
     def search(self, query: str, top_k: int = 10, **kwargs: Any) -> list[Chunk]:
         """摘要引导检索
 
@@ -39,6 +41,7 @@ class SummaryRetriever(Retriever):
         Returns:
             按相关性降序的 Chunk 列表
         """
+        get_client().update_current_span(input={"query": query, "top_k": top_k})
         query_vector = self.embedder.get_embedding(query)
 
         # 阶段1：摘要检索
@@ -97,4 +100,5 @@ class SummaryRetriever(Retriever):
             chunk.score = max(0, 1 - chunk.distance)
 
         logger.info(f"摘要引导检索完成: query='{query[:30]}...' hits={len(filtered)}")
+        get_client().update_current_span(output={"hits": len(filtered[:top_k])})
         return filtered[:top_k]

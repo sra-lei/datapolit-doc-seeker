@@ -7,6 +7,7 @@ import hashlib
 import json
 from array import array
 
+from langfuse import get_client, observe
 from loguru import logger
 
 from docs_seeker.core.config import settings
@@ -115,8 +116,11 @@ class SemanticCache:
 
     # ---------- 读写 ----------
 
+    @observe(name="check-semantic-cache", as_type="retriever", capture_input=False, capture_output=False)
     def search(self, question: str) -> dict | None:
+        get_client().update_current_span(input={"question": question})
         if not self.enabled or not self._available:
+            get_client().update_current_span(output={"hit": False, "reason": "disabled"})
             return None
         try:
             query_embedding = self._get_embedding(question)
@@ -140,6 +144,7 @@ class SemanticCache:
                     doc = results.docs[0]
                     # redis-py 8.x：JSON 索引的搜索结果整体打包在 doc.json（字符串）
                     data = json.loads(doc.json)
+                    get_client().update_current_span(output={"hit": True, "similarity": round(similarity, 4)})
                     return {
                         "answer": data.get("answer", ""),
                         "confidence": data.get("confidence", ""),
@@ -149,6 +154,7 @@ class SemanticCache:
             logger.warning(f"语义缓存查询失败: {e}")
         self._misses += 1
         cache_misses_total.inc()
+        get_client().update_current_span(output={"hit": False})
         return None
 
     def store(self, question: str, result: dict):

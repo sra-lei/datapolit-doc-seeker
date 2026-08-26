@@ -5,6 +5,7 @@ docs-seeker - 语义检索（Dense Retrieval）
 
 from typing import Any
 
+from langfuse import get_client, observe
 from loguru import logger
 
 from docs_seeker.core.config import settings
@@ -22,6 +23,7 @@ class DenseRetriever(Retriever):
         self.embedder = get_embedder()
         self.collection_name = settings.collection_name
 
+    @observe(name="retrieve-dense", as_type="retriever", capture_input=False, capture_output=False)
     def search(self, query: str, top_k: int = 10, filter_expr: str = "", **kwargs: Any) -> list[Chunk]:
         """语义检索
 
@@ -33,6 +35,7 @@ class DenseRetriever(Retriever):
         Returns:
             按相关性降序的 Chunk 列表
         """
+        get_client().update_current_span(input={"query": query, "top_k": top_k, "filter_expr": filter_expr})
         query_vector = self.embedder.get_embedding(query)
         results = self.milvus.search(
             collection_name=self.collection_name,
@@ -46,4 +49,5 @@ class DenseRetriever(Retriever):
             doc["score"] = max(0, 1 - doc.get("distance", 0))
             chunks.append(Chunk.from_dict(doc))
         logger.info(f"DenseRetriever 检索完成: query='{query[:30]}...' top_k={top_k} hits={len(chunks)}")
+        get_client().update_current_span(output={"hits": len(chunks)})
         return chunks

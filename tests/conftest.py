@@ -1,7 +1,13 @@
 """pytest 公共 fixtures（tests/unit 与 tests/integration 共享）"""
-import pytest
+import os
 
-from docs_seeker.infrastructure.retrieval.bm25_retriever import BM25Retriever
+# 测试环境禁用 Langfuse 链路追踪：防止测试产生的观测被上报到真实项目
+# （须在应用模块导入/客户端初始化之前设置）
+os.environ.setdefault("LANGFUSE_TRACING_ENABLED", "false")
+
+import pytest  # noqa: E402
+
+from docs_seeker.infrastructure.retrieval.bm25_retriever import BM25Retriever  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
