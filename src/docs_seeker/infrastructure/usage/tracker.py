@@ -3,7 +3,7 @@ docs-seeker - RAG 使用统计（按用户维度，Redis 持久化）
 
 独立于语义缓存（SEMANTIC_CACHE_ENABLED 开关不影响统计）：
 - 复用 redis_client 单例，键统一使用 rag:usage:* 前缀
-- 记录端：中间件对 /v1/chat、/v1/retrieve 请求做轻量埋点（用户、成功与否）；
+- 记录端：中间件对 /v1/chat 请求做轻量埋点（用户、成功与否）；
   chat_service 对问题文本做热门计数（rag:usage:top ZSet，精确匹配归并）
 - 查询端：/v1/usage/stats 聚合（总次数/成功率/活跃用户/用户 Top）；
   /v1/usage/top 返回热门问题 TopN（含语义缓存命中标记，供预热器与 ChatWidget 欢迎语）
@@ -20,7 +20,7 @@ from docs_seeker.infrastructure.cache.redis_client import get_redis_client
 _PREFIX = "rag:usage"
 
 # 需要统计的 RAG 接口
-_TRACKED_PATHS = {"/v1/chat", "/v1/retrieve"}
+_TRACKED_PATHS = {"/v1/chat"}
 
 _ANONYMOUS = "anonymous"
 
@@ -37,7 +37,7 @@ class UsageTracker:
 
         Args:
             user_id: 请求方用户 id（X-User-ID 头），空则记为 anonymous
-            path: 请求路径（仅 /v1/chat、/v1/retrieve 会被记录）
+            path: 请求路径（仅 /v1/chat 会被记录）
             status: HTTP 状态码（2xx/3xx 记为成功）
         """
         if path not in _TRACKED_PATHS:

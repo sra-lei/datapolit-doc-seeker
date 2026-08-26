@@ -13,7 +13,6 @@ src/docs_seeker/
 │   ├── routes/                   # 路由定义（文件拍平，对外保留 /v1 前缀）
 │   │   ├── __init__.py           # v1 路由聚合
 │   │   ├── chat.py               # /v1/chat
-│   │   ├── retrieve.py           # /v1/retrieve
 │   │   ├── health.py             # /v1/health
 │   │   ├── stats.py              # /v1/stats（缓存 + LLM 网关指标）
 │   │   ├── milvus.py             # /v1/milvus/stats（集合监控）
@@ -35,7 +34,6 @@ src/docs_seeker/
 │   │   └── query.py              # 查询实体
 │   ├── services/                 # 业务服务
 │   │   ├── chat_service.py       # 问答用例：检索 + 生成
-│   │   ├── search_service.py     # 纯检索用例
 │   │   ├── generator.py          # 答案生成（LLM 调用 + 置信度）
 │   │   ├── rag_pipeline.py       # RAG 完整流程编排
 │   │   └── top_warmup.py         # 热门问题预热器（后台线程）
@@ -116,7 +114,6 @@ HTTP 层 (api/)
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | `/v1/chat` | 问答：检索 + LLM 生成答案 |
-| POST | `/v1/retrieve` | 纯检索：返回文档列表 |
 | GET | `/v1/health` | 健康检查 |
 | GET | `/v1/stats` | 运行指标（语义缓存 + LLM 网关统计） |
 | GET | `/v1/milvus/stats` | Milvus 集合监控（状态/行数/向量维度/索引） |

@@ -2,7 +2,6 @@
 
 from docs_seeker.domain.services.chat_service import ChatService
 from docs_seeker.domain.services.generator import Generator
-from docs_seeker.domain.services.search_service import SearchService
 from docs_seeker.infrastructure.cache.semantic_cache import get_semantic_cache
 from docs_seeker.infrastructure.llm.gateway import get_llm_gateway
 from docs_seeker.infrastructure.retrieval.composite_retriever import CompositeRetriever
@@ -15,7 +14,6 @@ _generator: Generator | None = None
 _query_decomposer: QueryDecomposer | None = None
 _hybrid_router: HybridRouter | None = None
 _chat_service: ChatService | None = None
-_search_service: SearchService | None = None
 
 
 def get_composite_retriever() -> CompositeRetriever:
@@ -59,10 +57,3 @@ def get_chat_service() -> ChatService:
             usage_tracker=get_usage_tracker(),
         )
     return _chat_service
-
-
-def get_search_service() -> SearchService:
-    global _search_service
-    if _search_service is None:
-        _search_service = SearchService(retriever=get_composite_retriever())
-    return _search_service

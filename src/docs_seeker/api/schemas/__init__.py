@@ -1,6 +1,6 @@
 """请求/响应模型"""
 
-from docs_seeker.api.schemas.request import ChatMessage, ChatRequest, RetrieveRequest
+from docs_seeker.api.schemas.request import ChatMessage, ChatRequest
 from docs_seeker.api.schemas.response import (
     CacheStats,
     ChatResponse,
@@ -9,7 +9,6 @@ from docs_seeker.api.schemas.response import (
     MilvusCollectionStats,
     MilvusIndexInfo,
     MilvusStatsResponse,
-    RetrieveResponse,
     SourceDoc,
     StatsResponse,
     UsageStatsResponse,
@@ -28,8 +27,6 @@ __all__ = [
     "MilvusCollectionStats",
     "MilvusIndexInfo",
     "MilvusStatsResponse",
-    "RetrieveRequest",
-    "RetrieveResponse",
     "SourceDoc",
     "StatsResponse",
     "UsageStatsResponse",

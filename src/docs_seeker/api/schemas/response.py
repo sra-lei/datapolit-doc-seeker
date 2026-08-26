@@ -23,11 +23,6 @@ class ChatResponse(BaseModel):
     query_decomposed: list[str] | None = None
 
 
-class RetrieveResponse(BaseModel):
-    docs: list[SourceDoc] = []
-    total: int = 0
-
-
 class HealthResponse(BaseModel):
     status: str = "ok"
     milvus_connected: bool = False

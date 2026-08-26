@@ -55,7 +55,7 @@ src/docs_seeker/
 │   ├── middleware.py             # 请求日志 + 指标中间件
 │   ├── routes/                   # 路由（文件拍平，对外保留 /v1 前缀）
 │   │   ├── __init__.py           # v1 路由聚合
-│   │   ├── chat.py / retrieve.py / health.py
+│   │   ├── chat.py / health.py
 │   │   └── stats.py / milvus.py / usage.py
 │   └── schemas/                  # request.py / response.py
 ├── core/                         # 跨模块共享
@@ -66,7 +66,7 @@ src/docs_seeker/
 │   ├── prompts.yaml / retrieval.yaml
 ├── domain/                       # 核心业务层
 │   ├── models/                   # Chunk / Document / Query
-│   ├── services/                 # chat_service / search_service / generator / rag_pipeline / top_warmup
+│   ├── services/                 # chat_service / generator / rag_pipeline / top_warmup
 │   └── interfaces/               # Retriever / EmbeddingProvider / LLMProvider
 └── infrastructure/               # 基础设施层（外部依赖实现）
     ├── database/                 # milvus_client.py（只读）
@@ -196,7 +196,7 @@ src/docs_seeker/
 ## 5. 回归与验收基线
 
 - 启动冒烟：`uvicorn docs_seeker.api.main:app` 启动无异常日志；`GET /`、`GET /v1/health`、`GET /metrics` 返回 200
-- 链路冒烟：`POST /v1/retrieve` 返回带 `chapter/source` 的文档；`POST /v1/chat` 返回 answer + sources
+- 链路冒烟：`POST /v1/chat` 返回 answer + sources
 - 缓存验证：同一问题连续问两次，第二次响应 `cached=true`
 - 每次 Phase 完成后全量跑 pytest + 上述冒烟，再进入下一 Phase
 

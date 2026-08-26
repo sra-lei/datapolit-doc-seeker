@@ -4,7 +4,7 @@ docs-seeker - BM25 稀疏检索
 
 索引生命周期（v2 修复）：
 - 进程内共享：所有 BM25Retriever 实例共用同一份索引（class-level 共享态），
-  避免 ChatService / SearchService / Warmup 各自持有一份全量索引（每份都等于
+  避免 ChatService / Warmup 各自持有一份全量索引（每份都等于
   一次 Milvus 全量扫描 + 全量分词）。
 - 懒构建 + 线程安全：首次检索时用 double-checked locking 构建一次，后续请求
   只做 O(1) 的已构建判断，不会每次请求都全量扫描 Milvus。

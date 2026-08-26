@@ -79,7 +79,7 @@ def test_record_only_tracks_rag_paths():
     redis = FakeRedis()
     t = _tracker(redis)
     t.record("u1", "/v1/chat", 200)
-    t.record("u1", "/v1/retrieve", 500)
+    t.record("u1", "/v1/chat", 500)
     t.record("u1", "/v1/health", 200)  # 不统计
     assert redis.data["rag:usage:total"] == 2
     assert redis.data["rag:usage:success"] == 1
@@ -125,7 +125,7 @@ def test_stats_aggregation():
     t = _tracker(redis)
     t.record("u1", "/v1/chat", 200)
     t.record("u1", "/v1/chat", 500)
-    t.record("u2", "/v1/retrieve", 200)
+    t.record("u2", "/v1/chat", 200)
     stats = t.stats()
     assert stats["total_calls"] == 3
     assert stats["success_calls"] == 2

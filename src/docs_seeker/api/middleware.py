@@ -27,7 +27,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         http_requests_total.labels(method=request.method, path=request.url.path, status=response.status_code).inc()
         http_request_duration_seconds.labels(method=request.method, path=request.url.path).observe(duration)
 
-        # RAG 使用统计埋点（仅 /v1/chat、/v1/retrieve；Redis 不可用时静默降级）
+        # RAG 使用统计埋点（仅 /v1/chat；Redis 不可用时静默降级）
         get_usage_tracker().record(
             request.headers.get("X-User-ID", ""),
             request.url.path,
