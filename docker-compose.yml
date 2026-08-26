@@ -6,8 +6,14 @@ services:
       - "8001:8001"
     env_file:
       - .env
+    environment:
+      # 容器内通过服务名 redis 访问（.env 的 localhost 仅供宿主机直跑 uvicorn 用）
+      REDIS_URL: redis://redis:6379/0
     volumes:
       - ./src:/app/src
+    depends_on:
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     command: uvicorn docs_seeker.api.main:app --host 0.0.0.0 --port 8001 --reload
     healthcheck:
@@ -22,3 +28,23 @@ services:
       timeout: 5s
       start_period: 30s
       retries: 3
+
+  # Redis Stack（RediSearch + RedisJSON）：语义缓存/热门问题统计必需
+  # 注意：普通 redis 镜像缺少 ft()/json() 模块，语义缓存会初始化失败降级
+  redis:
+    image: redis/redis-stack-server:latest
+    container_name: docs-seeker-redis
+    # 宿主机映射 6380（本机 6379 已有旧 redis-server 占用，避免冲突）；仅调试用
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  redis_data:

@@ -67,18 +67,16 @@ class SemanticCache:
         return self._dim
 
     def _read_index_dim(self) -> int | None:
-        """读取已有索引的向量维度"""
+        """读取已有索引的向量维度（redis-py 8.x：info() 的 attributes 为扁平列表）"""
         try:
             info = self.redis.ft(_INDEX_NAME).info()
-            attrs = info.get("attributes", []) if isinstance(info, dict) else getattr(info, "attributes", [])
-            for attr in attrs or []:
-                if not isinstance(attr, dict):
+            for attr in info.get("attributes", []):
+                # ["identifier", "$.embedding", "attribute", "embedding", "type", "VECTOR", ..., "dim", 1024, ...]
+                if "VECTOR" not in attr:
                     continue
-                vector_index = attr.get("vector_index")
-                if isinstance(vector_index, dict):
-                    dim = vector_index.get("dims")
-                    if dim:
-                        return int(dim)
+                for i, item in enumerate(attr):
+                    if item == "dim" and i + 1 < len(attr) and attr[i + 1]:
+                        return int(attr[i + 1])
         except Exception as e:
             logger.warning(f"读取语义缓存索引维度失败: {e}")
         return None
@@ -123,12 +121,14 @@ class SemanticCache:
         try:
             query_embedding = self._get_embedding(question)
             self._ensure_dim(query_embedding)
-            # Redis Stack 向量检索（KNN）必须使用 dialect=2
+            # Redis Stack 向量检索（KNN）必须使用 dialect=2；
+            # redis-py 8.x 起 search() 不再接受 dialect 关键字参数，需通过 Query 对象传递
+            from redis.commands.search.query import Query
+
             q = "(*)=>[KNN 1 @embedding $vec AS score]"
             results = self.redis.ft(_INDEX_NAME).search(
-                q,
+                Query(q).dialect(2),
                 query_params={"vec": self._encode_vector(query_embedding)},
-                dialect=2,
             )
             if results.docs:
                 score = float(results.docs[0].score)
@@ -138,10 +138,12 @@ class SemanticCache:
                     cache_hits_total.inc()
                     logger.info(f"语义缓存命中 (相似度: {similarity:.3f})")
                     doc = results.docs[0]
+                    # redis-py 8.x：JSON 索引的搜索结果整体打包在 doc.json（字符串）
+                    data = json.loads(doc.json)
                     return {
-                        "answer": doc["answer"],
-                        "confidence": doc["confidence"],
-                        "sources": json.loads(doc["sources"] or "[]"),
+                        "answer": data.get("answer", ""),
+                        "confidence": data.get("confidence", ""),
+                        "sources": json.loads(data.get("sources") or "[]"),
                     }
         except Exception as e:
             logger.warning(f"语义缓存查询失败: {e}")

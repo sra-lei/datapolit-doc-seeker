@@ -1,7 +1,7 @@
 """语义缓存单元测试（mock Redis 与向量化，不依赖真实外部服务）
 
-覆盖：向量编码格式、禁用开关、KNN dialect=2 与字节向量参数、
-命中路径（Document 用 [] 访问）、维度漂移自动重建索引。
+覆盖：向量编码格式、禁用开关、KNN dialect=2 与字节向量参数（Query 对象传递）、
+命中路径（redis-py 8.x 的 doc.json 打包结构）、维度漂移自动重建索引。
 """
 from unittest.mock import patch
 
@@ -10,14 +10,11 @@ from docs_seeker.infrastructure.cache.semantic_cache import SemanticCache
 
 
 class FakeDoc:
-    """模拟 redis-py 的 Document：仅支持 [] 访问（无 .get()）"""
+    """模拟 redis-py 8.x 的 Document：JSON 索引的搜索结果字段在 .json 属性"""
 
     def __init__(self, **kwargs):
-        self._data = kwargs
+        self.json = kwargs["json"]
         self.score = kwargs.get("score", 0.0)
-
-    def __getitem__(self, key):
-        return self._data[key]
 
 
 class FakeSearchResult:
@@ -39,7 +36,15 @@ class FakeIndex:
     def info(self):
         if not self.existing:
             raise Exception("no index")
-        return {"attributes": [{"attribute": "embedding", "vector_index": {"dims": self.dim}}]}
+        # redis-py 8.x：attributes 为扁平列表
+        return {
+            "attributes": [
+                [
+                    "identifier", "$.embedding", "attribute", "embedding", "type", "VECTOR",
+                    "algorithm", "FLAT", "data_type", "FLOAT32", "dim", self.dim, "distance_metric", "COSINE",
+                ]
+            ]
+        }
 
     def create_index(self, schema, definition=None):
         self.created_schema = schema
@@ -48,6 +53,7 @@ class FakeIndex:
         self.dropped = True
 
     def search(self, query, **kwargs):
+        self.last_query = query
         self.last_search_kwargs = kwargs
         return FakeSearchResult(self.search_docs)
 
@@ -115,17 +121,17 @@ def test_search_uses_dialect2_and_bytes_vector():
         assert cache._dim == FakeEmbedder.DIM
         assert cache.search("测试问题") is None  # 无结果 → miss
         kwargs = fake_redis.index.last_search_kwargs
-        assert kwargs["dialect"] == 2
+        # redis-py 8.x：dialect 通过 Query 对象传递，不再作为 search() 关键字参数
+        assert fake_redis.index.last_query._dialect == 2
         vec = kwargs["query_params"]["vec"]
         assert isinstance(vec, bytes)
         assert len(vec) == 4 * FakeEmbedder.DIM
 
 
 def test_search_hit_returns_cached_answer():
+    # redis-py 8.x：JSON 索引搜索结果整体打包在 doc.json（字符串）
     hit_doc = FakeDoc(
-        answer="缓存答案",
-        confidence="high",
-        sources='[{"id": "1", "text": "t"}]',
+        json='{"answer": "缓存答案", "confidence": "high", "sources": "[{\\"id\\": \\"1\\", \\"text\\": \\"t\\"}]"}',
         score=0.05,  # similarity = 0.95 >= 0.92（阈值）
     )
     index = FakeIndex(existing=True, dim=FakeEmbedder.DIM, search_docs=[hit_doc])
@@ -140,6 +146,30 @@ def test_search_hit_returns_cached_answer():
         assert cache.stats["hits"] == 1
 
 
+def test_read_index_dim_supports_flat_list_attributes():
+    """redis-py 8.x：ft().info() 的 attributes 是扁平列表，需能解析出 dim"""
+    flat = [
+        ["identifier", "$.question", "attribute", "question", "type", "TEXT", "WEIGHT", 1.0, "NOSTEM"],
+        [
+            "identifier", "$.embedding", "attribute", "embedding", "type", "VECTOR",
+            "algorithm", "FLAT", "data_type", "FLOAT32", "dim", 1024, "distance_metric", "COSINE",
+        ],
+    ]
+
+    class _InfoIndex:
+        def info(self):
+            return {"attributes": flat}
+
+    class _InfoRedis:
+        def ft(self, name):
+            return _InfoIndex()
+
+    with patch("docs_seeker.infrastructure.cache.semantic_cache.get_redis_client", return_value=_InfoRedis()):
+        cache = SemanticCache()
+        assert cache._dim == 1024
+        assert cache._available is True
+
+
 def test_dim_drift_rebuilds_index():
     index = FakeIndex(existing=True, dim=16)  # 与真实维度 8 不一致 → 触发重建
     fake_redis, p_redis, p_embedder, p_enabled = _patch(index=index)
@@ -149,4 +179,4 @@ def test_dim_drift_rebuilds_index():
         cache.search("触发维度漂移")
         assert index.dropped is True
         assert cache._dim == FakeEmbedder.DIM
-        assert index.last_search_kwargs["dialect"] == 2
+        assert index.last_query._dialect == 2

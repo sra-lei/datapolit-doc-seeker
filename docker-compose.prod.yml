@@ -1,18 +1,23 @@
 # ============================================================
-# docs-seeker - 生产环境部署（服务器拉镜像版）
+# docs-seeker - 生产环境部署（服务器拉镜像版，内置 Redis Stack）
 #
 # 使用：
-#   docker compose -f docker-compose.prod.yml pull docs-seeker
-#   docker compose -f docker-compose.prod.yml up -d docs-seeker
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
 #   docker compose -f docker-compose.prod.yml logs -f docs-seeker
+#
+# 本文件内置 Redis Stack（语义缓存/热门问题统计必需，含 RediSearch + RedisJSON），
+# 无需外部 Redis；docs-seeker 容器内通过服务名 redis:6379 访问。
+# 若服务器上已有 deploy 大栈在跑（其 redis 容器名同为 datapolit-redis），
+# 两者互斥，请二选一，不要同时 up。
 #
 # 前置：服务器 /opt/datapolit-docs-seeker 下必须存在 .env（密钥不进仓库，
 # 首次部署手动放置），关键字段：
 #   DASHSCOPE_API_KEY           （百炼 Embedding）
 #   DEEPSEEK_API_KEY            （DeepSeek 对话 LLM）
 #   MILVUS_URI / MILVUS_TOKEN   （Zilliz Cloud endpoint / token）
-#   REDIS_URL                   （Redis Stack，语义缓存）
 #   SEMANTIC_CACHE_ENABLED      （可选，默认 true）
+#   REDIS_URL                   （可选，会被本 compose 覆盖为 redis://redis:6379/0）
 # ============================================================
 
 services:
@@ -38,6 +43,12 @@ services:
       PYTHONDONTWRITEBYTECODE: "1"
       # 生产环境：关闭 /docs、/redoc、/openapi.json
       ENVIRONMENT: "production"
+      # 容器内通过服务名 redis 访问内置的 Redis Stack（覆盖 .env 里的值）
+      REDIS_URL: "redis://redis:6379/0"
+
+    depends_on:
+      redis:
+        condition: service_healthy
 
     # 健康检查：直接调本机 /v1/health，不依赖 curl（slim 没装）
     healthcheck:
@@ -83,6 +94,36 @@ services:
 
     networks:
       - datapolit-shared
+
+  # ----------------------------------------------------------
+  # Redis Stack：语义缓存（RediSearch ft() + RedisJSON json() 必需模块，
+  # 普通 redis 镜像没有，语义缓存会初始化失败降级）
+  # 不映射宿主机端口，仅容器内通过服务名 redis:6379 访问
+  # ----------------------------------------------------------
+  redis:
+    image: redis/redis-stack-server:latest
+    container_name: datapolit-redis
+    environment:
+      # 镜像入口是 redis-stack-server，额外参数通过 REDIS_ARGS 传入
+      REDIS_ARGS: "--maxmemory 128mb --maxmemory-policy allkeys-lru"
+    volumes:
+      - redis_data:/data
+    networks:
+      - datapolit-shared
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  redis_data:
 
 networks:
   datapolit-shared:
