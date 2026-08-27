@@ -1,14 +1,16 @@
+# docs-seeker 独立编排（本地开发：源码挂载 + 热重载）
+# 统一走 datapolit-shared 共享网络，容器名与 deploy 生产编排保持一致
 services:
   docs-seeker:
     build: .
-    container_name: docs-seeker
+    container_name: datapolit-docs-seeker
     ports:
       - "8001:8001"
     env_file:
       - .env
     environment:
-      # 容器内通过服务名 redis 访问（.env 的 localhost 仅供宿主机直跑 uvicorn 用）
-      REDIS_URL: redis://redis:6379/0
+      # 共享网络内按容器名访问 redis（.env 的 localhost 仅供宿主机直跑 uvicorn 用）
+      REDIS_URL: redis://datapolit-redis:6379/0
     volumes:
       - ./src:/app/src
     depends_on:
@@ -16,6 +18,8 @@ services:
         condition: service_healthy
     restart: unless-stopped
     command: uvicorn docs_seeker.api.main:app --host 0.0.0.0 --port 8001 --reload
+    networks:
+      - datapolit-shared
     healthcheck:
       test:
         [
@@ -33,13 +37,15 @@ services:
   # 注意：普通 redis 镜像缺少 ft()/json() 模块，语义缓存会初始化失败降级
   redis:
     image: redis/redis-stack-server:latest
-    container_name: docs-seeker-redis
+    container_name: datapolit-redis
     # 宿主机映射 6380（本机 6379 已有旧 redis-server 占用，避免冲突）；仅调试用
     ports:
       - "6380:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped
+    networks:
+      - datapolit-shared
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -48,3 +54,7 @@ services:
 
 volumes:
   redis_data:
+
+networks:
+  datapolit-shared:
+    external: true
