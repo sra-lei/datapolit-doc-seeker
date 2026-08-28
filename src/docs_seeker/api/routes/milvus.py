@@ -31,10 +31,11 @@ def _collection_stats(store, name: str) -> MilvusCollectionStats:
 def milvus_stats():
     """Milvus 集合监控：在线状态 / 实体数 / 向量维度 / 索引信息"""
     store = get_milvus_store()
+    server_version = store.get_server_version()
     docs = _collection_stats(store, store.collection_name)
     summaries = _collection_stats(store, store.summary_collection_name)
     return MilvusStatsResponse(
-        connected=docs.exists or summaries.exists,
-        server_version=store.get_server_version(),
+        connected=len(server_version) != 0,
+        server_version=server_version,
         collections={"docs": docs, "summaries": summaries},
     )
