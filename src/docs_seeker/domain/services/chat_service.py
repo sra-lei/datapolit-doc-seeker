@@ -78,7 +78,11 @@ class ChatService:
                 if cached:
                     logger.info("语义缓存命中，直接返回缓存答案")
                     langfuse.update_current_span(
-                        output={"answer": cached["answer"], "confidence": cached.get("confidence", "medium"), "cached": True}
+                        output={
+                            "answer": cached["answer"],
+                            "confidence": cached.get("confidence", "medium"),
+                            "cached": True,
+                        }
                     )
                     return ChatResult(
                         answer=cached["answer"],
@@ -153,9 +157,7 @@ class ChatService:
                     answer = cached["answer"]
                     confidence = cached.get("confidence", "medium")
                     sources = cached.get("sources", [])
-                    langfuse.update_current_span(
-                        output={"answer": answer, "confidence": confidence, "cached": True}
-                    )
+                    langfuse.update_current_span(output={"answer": answer, "confidence": confidence, "cached": True})
                     yield {
                         "type": "meta",
                         "cached": True,

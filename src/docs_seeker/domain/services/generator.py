@@ -42,7 +42,8 @@ class Generator:
         """单次调用 LLM 网关（统一温度口径；name 供 Langfuse generation 观测定位）。
 
         温度取自 ``LLM_TEMPERATURE``（默认 0.3 = 历史口径；评估/A-B 用 0，
-        否则采样噪声会盖过待测改动的量级）。
+        否则采样噪声会盖过待测改动的量级）；模型可取 ``LLM_GENERATE_MODEL``
+        覆盖（分层路由：生成走非推理模型；空 = 沿用 LLM_MODEL，旧行为）。
         """
         return self.llm.generate(
             messages=messages,
@@ -50,6 +51,7 @@ class Generator:
             temperature=settings.llm_temperature,
             stream=stream,
             name=name,
+            model=settings.llm_generate_model or None,
         )
 
     def _call_with_budget_guard(self, messages: list[dict], name: str = "generate-response") -> str:

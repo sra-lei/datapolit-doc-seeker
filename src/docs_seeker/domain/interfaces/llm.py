@@ -15,6 +15,7 @@ class LLMProvider(ABC):
         temperature: float = 0.3,
         stream: bool = False,
         name: str = "llm-call",
+        model: str | None = None,
     ) -> Any:
         """调用 LLM 生成
 
@@ -24,6 +25,7 @@ class LLMProvider(ABC):
             temperature: 采样温度
             stream: 是否流式
             name: Langfuse generation 观测名（稳定、动词开头，便于过滤/评估器定位）
+            model: 本次调用的模型覆盖（None = 用网关主模型；分层模型路由用）
 
         Returns:
             OpenAI 风格响应对象（response.choices[0].message.content）

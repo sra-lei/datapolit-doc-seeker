@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     # 查询改写温度（原本硬编码 0.1；可配置以便评估时一并固定在 0）
     llm_decompose_temperature: float = 0.1
 
+    # 生成层模型覆盖（空 = 用 LLM_MODEL，即旧行为）。分层模型路由：答案生成用
+    # 非推理模型（如 deepseek-chat）降延迟/降成本，而「查询改写」仍用 LLM_MODEL
+    # 指定的推理模型——本语料是抽取式的，推理模型在生成环节的增益尚未证明。
+    llm_generate_model: str = ""
+
 
 settings = Settings()
 

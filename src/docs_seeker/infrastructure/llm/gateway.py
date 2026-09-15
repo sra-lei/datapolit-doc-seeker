@@ -80,15 +80,34 @@ class LLMGateway(LLMProvider):
         self.success_calls = 0
         self.fallback_calls = 0
 
-    def generate(self, messages: list, max_tokens: int = 600, temperature: float = 0.3, stream: bool = False, name: str = "llm-call"):
+    def generate(
+        self,
+        messages: list,
+        max_tokens: int = 600,
+        temperature: float = 0.3,
+        stream: bool = False,
+        name: str = "llm-call",
+        model: str | None = None,
+    ):
+        """调用 LLM；``model`` 非空时覆盖主模型（分层模型路由，见 LLM_GENERATE_MODEL）。
+
+        覆盖只影响本次调用：生成层走非推理模型降延迟/成本，而「判断/改写」仍用
+        `LLM_MODEL` 指定的推理模型。熔断降级时同样沿用本次覆盖的模型名。
+        """
         self.total_calls += 1
         if self.circuit_breaker.state == CircuitState.OPEN:
             if self.fallback_client:
-                return self._try_fallback(messages, max_tokens, temperature, stream, name)
+                return self._try_fallback(messages, max_tokens, temperature, stream, name, model)
             raise AllModelsFailedError("熔断器已打开，且无备用模型")
         try:
             result = self._call_with_retry(
-                self.primary_client, self.primary_model, messages, max_tokens, temperature, stream, name
+                self.primary_client,
+                model or self.primary_model,
+                messages,
+                max_tokens,
+                temperature,
+                stream,
+                name,
             )
             self.success_calls += 1
             self.circuit_breaker.failure_count = 0
@@ -97,7 +116,7 @@ class LLMGateway(LLMProvider):
             logger.error(f"主模型调用失败: {e}")
             if self.fallback_client:
                 try:
-                    result = self._try_fallback(messages, max_tokens, temperature, stream, name)
+                    result = self._try_fallback(messages, max_tokens, temperature, stream, name, model)
                     self.fallback_calls += 1
                     return result
                 except Exception as fb_e:
@@ -105,12 +124,20 @@ class LLMGateway(LLMProvider):
                     raise AllModelsFailedError("主模型和备用模型均失败") from fb_e
             raise AllModelsFailedError(f"主模型失败且无备用: {e}") from e
 
-    def _try_fallback(self, messages, max_tokens, temperature, stream, name="llm-call"):
+    def _try_fallback(self, messages, max_tokens, temperature, stream, name="llm-call", model=None):
         return self._call_with_retry(
-            self.fallback_client, self.fallback_model, messages, max_tokens, temperature, stream, name
+            self.fallback_client,
+            model or self.fallback_model,
+            messages,
+            max_tokens,
+            temperature,
+            stream,
+            name,
         )
 
-    def _call_with_retry(self, client, model, messages, max_tokens, temperature, stream, name="llm-call", max_retries=3):
+    def _call_with_retry(
+        self, client, model, messages, max_tokens, temperature, stream, name="llm-call", max_retries=3
+    ):
         last_error = None
         call_kwargs: dict = {
             "model": model,
