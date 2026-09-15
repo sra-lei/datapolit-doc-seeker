@@ -28,7 +28,7 @@ class QueryDecomposer:
         return self.llm.generate(
             messages=[{"role": "user", "content": prompt}],
             max_tokens=max_tokens,
-            temperature=0.1,
+            temperature=settings.llm_decompose_temperature,
             name=name,
         )
 

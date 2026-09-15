@@ -38,11 +38,19 @@ class Generator:
         messages.append({"role": "user", "content": f"基于以下文档回答问题：\n\n{context}\n\n问题：{question}"})
         return messages
 
-    def _call(
-        self, messages: list[dict], max_tokens: int, stream: bool = False, name: str = "generate-response"
-    ):
-        """单次调用 LLM 网关（统一温度口径；name 供 Langfuse generation 观测定位）。"""
-        return self.llm.generate(messages=messages, max_tokens=max_tokens, temperature=0.3, stream=stream, name=name)
+    def _call(self, messages: list[dict], max_tokens: int, stream: bool = False, name: str = "generate-response"):
+        """单次调用 LLM 网关（统一温度口径；name 供 Langfuse generation 观测定位）。
+
+        温度取自 ``LLM_TEMPERATURE``（默认 0.3 = 历史口径；评估/A-B 用 0，
+        否则采样噪声会盖过待测改动的量级）。
+        """
+        return self.llm.generate(
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=settings.llm_temperature,
+            stream=stream,
+            name=name,
+        )
 
     def _call_with_budget_guard(self, messages: list[dict], name: str = "generate-response") -> str:
         """调用生成并做预算兜底：推理模型把预算耗在 reasoning 上时正文会为空。

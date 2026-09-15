@@ -68,6 +68,13 @@ class Settings(BaseSettings):
     # （长推理问题实测 20~60s），沿用普通模型的 15s 会直接把长答案打成超时失败。
     llm_timeout_seconds: float = 120.0
 
+    # 采样温度。0 = 确定性输出（**评估与 A/B 必须用 0**：同代码同语料下单轮
+    # 22 题的分数摆幅曾达 0.75，噪声大于待测改动的量级）；>0 = 保留多样性。
+    # 默认沿用历史口径 0.3，评估跑批用环境变量 LLM_TEMPERATURE=0 覆盖。
+    llm_temperature: float = 0.3
+    # 查询改写温度（原本硬编码 0.1；可配置以便评估时一并固定在 0）
+    llm_decompose_temperature: float = 0.1
+
 
 settings = Settings()
 
