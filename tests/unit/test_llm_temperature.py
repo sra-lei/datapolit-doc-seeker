@@ -28,8 +28,8 @@ class RecordingLLM:
         self.content = content
         self.calls: list[dict] = []
 
-    def generate(self, messages, max_tokens=600, temperature=0.3, stream=False, name="llm-call"):
-        self.calls.append({"temperature": temperature, "max_tokens": max_tokens, "name": name})
+    def generate(self, messages, max_tokens=600, temperature=0.3, stream=False, name="llm-call", model=None):
+        self.calls.append({"temperature": temperature, "max_tokens": max_tokens, "name": name, "model": model})
         return SimpleNamespace(
             choices=[SimpleNamespace(message=SimpleNamespace(content=self.content), finish_reason="stop")]
         )

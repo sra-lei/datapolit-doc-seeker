@@ -41,8 +41,8 @@ class ScriptedLLM:
         self.script = list(script)
         self.calls: list[dict] = []
 
-    def generate(self, messages, max_tokens=600, temperature=0.3, stream=False, name="llm-call"):
-        self.calls.append({"max_tokens": max_tokens, "stream": stream, "name": name})
+    def generate(self, messages, max_tokens=600, temperature=0.3, stream=False, name="llm-call", model=None):
+        self.calls.append({"max_tokens": max_tokens, "stream": stream, "name": name, "model": model})
         content, finish = self.script[min(len(self.calls) - 1, len(self.script) - 1)]
         if stream:
             # 流式：产出 OpenAI 风格 chunk（只带 delta.content）
