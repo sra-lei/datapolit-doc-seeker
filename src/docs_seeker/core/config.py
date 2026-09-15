@@ -55,6 +55,15 @@ class Settings(BaseSettings):
     # 建索引单次拉取文档上限（与 MilvusStore.get_all_documents 的 limit 对齐）
     bm25_max_docs: int = 10000
 
+    # LLM 输出预算（token）
+    # ⚠️ 推理模型（如 deepseek-v4-flash）会先消耗 reasoning token，预算过小会
+    # 出现 finish_reason=length 且正文为空——生成与查询改写两处都必须留足预算。
+    llm_generate_max_tokens: int = 2000  # 答案生成预算
+    llm_decompose_max_tokens: int = 800  # 查询改写预算
+    # 截断（finish_reason=length）且正文为空时的放大预算重试（每处至多一次）；
+    # 小于等于当前预算时视为关闭该重试
+    llm_retry_max_tokens: int = 4000
+
 
 settings = Settings()
 

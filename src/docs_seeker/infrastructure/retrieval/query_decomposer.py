@@ -5,7 +5,7 @@ docs-seeker - 查询分解
 
 from loguru import logger
 
-from docs_seeker.core.config import prompts
+from docs_seeker.core.config import prompts, settings
 from docs_seeker.domain.interfaces.llm import LLMProvider
 from docs_seeker.domain.models.query import Query
 from docs_seeker.infrastructure.llm.gateway import get_llm_gateway
@@ -24,20 +24,45 @@ class QueryDecomposer:
         # 允许注入 LLM（deps 组装点传入）；缺省时走全局网关单例
         self.llm = llm or get_llm_gateway()
 
+    def _call(self, prompt: str, max_tokens: int, name: str):
+        return self.llm.generate(
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=max_tokens,
+            temperature=0.1,
+            name=name,
+        )
+
+    def _split_lines(self, response) -> list[str]:
+        """从响应取正文并按行切分（空正文 → 空列表）。"""
+        try:
+            content = response.choices[0].message.content or ""
+        except (AttributeError, IndexError, TypeError):
+            return []
+        return [q.strip() for q in content.strip().split("\n") if q.strip()]
+
     def decompose(self, question: str) -> Query:
         """分解查询，返回 Query（含子问题列表，含原始问题）"""
         prompt_template = (prompts.get("query_decomposer") or {}).get("system") or _DEFAULT_PROMPT
         prompt = f"{prompt_template}\n\n问题：{question}"
+        budget = settings.llm_decompose_max_tokens
         try:
-            response = self.llm.generate(
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=200,
-                temperature=0.1,
-                name="query-decompose",
-            )
-            content = response.choices[0].message.content.strip()
-            sub_questions = [q.strip() for q in content.split("\n") if q.strip()]
+            response = self._call(prompt, budget, "query-decompose")
+            sub_questions = self._split_lines(response)
+            if not sub_questions and settings.llm_retry_max_tokens > budget:
+                # 推理模型把预算吃在 reasoning 上 → 正文为空。放大预算重试一次，
+                # 不要静默退化成单路检索（历史上正是这样丢掉了查询分解）。
+                finish = getattr(getattr(response, "choices", [None])[0], "finish_reason", None)
+                logger.warning(
+                    f"查询分解正文为空（finish={finish}, max_tokens={budget}）"
+                    f"——疑似 reasoning 吃满预算，用 max_tokens={settings.llm_retry_max_tokens} 重试一次"
+                )
+                response = self._call(prompt, settings.llm_retry_max_tokens, "query-decompose-budget-retry")
+                sub_questions = self._split_lines(response)
             if not sub_questions:
+                logger.warning(
+                    f"查询分解仍为空（max_tokens={settings.llm_retry_max_tokens}）"
+                    "→ 退回原问题单路检索（多路召回能力本次未生效）"
+                )
                 return Query(text=question, sub_queries=[question])
             if question not in sub_questions:
                 sub_questions.insert(0, question)

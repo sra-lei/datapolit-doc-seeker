@@ -93,7 +93,9 @@ class ChatService:
             answer = sanitize_output(answer)
             source_dicts = [{k: v for k, v in chunk.to_dict().items() if k in CACHE_FIELDS} for chunk in chunks]
 
-            if use_cache:
+            if use_cache and answer.strip():
+                # 空答案不写缓存：推理模型预算耗尽时会产出空正文，写进去会持续污染
+                # 后续命中（且极难排查）
                 self.cache.store(question, {"answer": answer, "confidence": confidence, "sources": source_dicts})
 
             langfuse.update_current_span(
@@ -198,7 +200,8 @@ class ChatService:
             answer = sanitize_output("".join(parts))
             confidence = compute_confidence(answer, chunks)
 
-            if use_cache:
+            if use_cache and answer.strip():
+                # 同 chat()：空答案不写缓存，避免污染后续命中
                 self.cache.store(question, {"answer": answer, "confidence": confidence, "sources": source_dicts})
 
             langfuse.update_current_span(

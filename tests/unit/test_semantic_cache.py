@@ -164,7 +164,10 @@ def test_read_index_dim_supports_flat_list_attributes():
         def ft(self, name):
             return _InfoIndex()
 
-    with patch("docs_seeker.infrastructure.cache.semantic_cache.get_redis_client", return_value=_InfoRedis()):
+    with (
+        patch("docs_seeker.infrastructure.cache.semantic_cache.get_redis_client", return_value=_InfoRedis()),
+        patch.object(settings, "semantic_cache_enabled", True),  # 用例自带环境，不依赖外部 .env
+    ):
         cache = SemanticCache()
         assert cache._dim == 1024
         assert cache._available is True
