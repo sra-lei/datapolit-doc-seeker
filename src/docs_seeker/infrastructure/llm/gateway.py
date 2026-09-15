@@ -118,7 +118,8 @@ class LLMGateway(LLMProvider):
             "max_tokens": max_tokens,
             "temperature": temperature,
             "stream": stream,
-            "timeout": 15,
+            # 推理模型响应时间波动大（实测 10~60s），超时配置化，默认 120s
+            "timeout": settings.llm_timeout_seconds,
             # Langfuse：为本次生成指定稳定名称（generation 观测名）
             "name": name,
         }

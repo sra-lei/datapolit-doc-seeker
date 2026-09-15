@@ -58,11 +58,15 @@ class Settings(BaseSettings):
     # LLM 输出预算（token）
     # ⚠️ 推理模型（如 deepseek-v4-flash）会先消耗 reasoning token，预算过小会
     # 出现 finish_reason=length 且正文为空——生成与查询改写两处都必须留足预算。
-    llm_generate_max_tokens: int = 2000  # 答案生成预算
-    llm_decompose_max_tokens: int = 800  # 查询改写预算
+    # 实测：泛化汇总类问题（"公司对员工有哪些要求"）单是 reasoning 就 ~8000 token。
+    llm_generate_max_tokens: int = 8000  # 答案生成预算
+    llm_decompose_max_tokens: int = 2000  # 查询改写预算
     # 截断（finish_reason=length）且正文为空时的放大预算重试（每处至多一次）；
     # 小于等于当前预算时视为关闭该重试
-    llm_retry_max_tokens: int = 4000
+    llm_retry_max_tokens: int = 16000
+    # 单次 LLM 调用的 HTTP 超时（秒）。推理模型的响应时间随题目波动很大
+    # （长推理问题实测 20~60s），沿用普通模型的 15s 会直接把长答案打成超时失败。
+    llm_timeout_seconds: float = 120.0
 
 
 settings = Settings()
