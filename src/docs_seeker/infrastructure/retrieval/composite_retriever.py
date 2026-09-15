@@ -13,6 +13,7 @@ from docs_seeker.domain.interfaces.retriever import Retriever
 from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.infrastructure.retrieval.bm25_retriever import BM25Retriever
 from docs_seeker.infrastructure.retrieval.dense_retriever import DenseRetriever
+from docs_seeker.infrastructure.retrieval.metadata_filter import build_milvus_expr
 from docs_seeker.infrastructure.retrieval.summary_retriever import SummaryRetriever
 
 _DEFAULT_WEIGHTS = {"dense": 0.5, "bm25": 0.3, "summary": 0.2}
@@ -35,12 +36,35 @@ class CompositeRetriever(Retriever):
         self.max_fetch = int(comp_cfg.get("max_fetch", 30))
 
     @observe(name="retrieve-multi-route", as_type="retriever", capture_input=False, capture_output=False)
-    def search(self, query: str, top_k: int = 10, use_summary: bool = True, **kwargs: Any) -> list[Chunk]:
+    def search(
+        self,
+        query: str,
+        top_k: int = 10,
+        use_summary: bool = True,
+        meta_filter: dict[str, list[str]] | None = None,
+        **kwargs: Any,
+    ) -> list[Chunk]:
+        """三路检索 + RRF 融合。
+
+        Args:
+            meta_filter: 结构化元数据过滤（``{字段: [取值前缀]}``，见
+                ``metadata_filter.parse_question_metadata``）。dense 路转成 Milvus
+                过滤表达式、bm25 路转成进程内谓词；None/空 = 不过滤（旧行为）。
+        """
         # Langfuse：检索观测只记录查询与结果规模，不捕获全量文档正文
-        get_client().update_current_span(input={"query": query, "top_k": top_k})
+        get_client().update_current_span(input={"query": query, "top_k": top_k, "meta_filter": meta_filter})
+        filter_expr = build_milvus_expr(meta_filter)
         fetch_k = min(top_k * self.fetch_factor, self.max_fetch)
-        dense_results = self.dense.search(query, top_k=fetch_k)
-        bm25_results = self.bm25.search(query, top_k=fetch_k)
+        dense_results = self.dense.search(query, top_k=fetch_k, filter_expr=filter_expr)
+        if filter_expr and not dense_results:
+            # 结构词解析出来的过滤条件在本语料没有命中（条号不存在/字段缺失）时，
+            # 宁可退回全量检索，也不要因为一个猜测的过滤条件把答案变成空。
+            logger.warning(f"元数据过滤后 dense 无命中（filter={filter_expr}），回退全量检索")
+            dense_results = self.dense.search(query, top_k=fetch_k)
+        bm25_results = self.bm25.search(query, top_k=fetch_k, meta_filter=meta_filter)
+        if meta_filter and not bm25_results:
+            logger.warning("元数据过滤后 bm25 无命中，回退全量检索")
+            bm25_results = self.bm25.search(query, top_k=fetch_k)
         summary_results = self.summary.search(query, top_k=fetch_k) if use_summary else []
         logger.info(f"多路检索: dense={len(dense_results)} bm25={len(bm25_results)} summary={len(summary_results)}")
 

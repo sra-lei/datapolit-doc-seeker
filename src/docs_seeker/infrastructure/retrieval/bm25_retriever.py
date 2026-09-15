@@ -27,6 +27,7 @@ from docs_seeker.core.config import settings
 from docs_seeker.domain.interfaces.retriever import Retriever
 from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.infrastructure.database.milvus_client import get_milvus_store
+from docs_seeker.infrastructure.retrieval.metadata_filter import matches_metadata
 
 
 class BM25Retriever(Retriever):
@@ -120,17 +121,26 @@ class BM25Retriever(Retriever):
     # ---------------- 检索 ----------------
 
     @observe(name="retrieve-bm25", as_type="retriever", capture_input=False, capture_output=False)
-    def search(self, query: str, top_k: int = 10, **kwargs: Any) -> list[Chunk]:
+    def search(
+        self,
+        query: str,
+        top_k: int = 10,
+        meta_filter: dict[str, list[str]] | None = None,
+        **kwargs: Any,
+    ) -> list[Chunk]:
         """BM25 检索
 
         Args:
             query: 用户查询文本
             top_k: 返回数量
+            meta_filter: 结构化元数据过滤（``{字段: [取值前缀]}``，见
+                ``metadata_filter``）；进程内索引是本地全量文档，用同一谓词
+                过滤候选集；None/空 = 不过滤（旧行为）。
 
         Returns:
             按相关性降序的 Chunk 列表
         """
-        get_client().update_current_span(input={"query": query, "top_k": top_k})
+        get_client().update_current_span(input={"query": query, "top_k": top_k, "meta_filter": meta_filter})
         # 线程安全懒构建：已构建时仅一次加锁 + 标志判断，开销可忽略
         self.build_index()
         if not self._shared_built or not self._shared_docs:
@@ -153,6 +163,9 @@ class BM25Retriever(Retriever):
         scores: list[tuple[int, float]] = []
 
         for i, doc in enumerate(docs):
+            # 结构化元数据过滤：进程内索引无 Milvus 过滤能力，用同一谓词过滤候选集
+            if not matches_metadata(doc, meta_filter):
+                continue
             doc_len = len(doc.get("text", ""))
             score = 0.0
             for term in query_tokens:

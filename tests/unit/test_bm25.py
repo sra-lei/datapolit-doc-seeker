@@ -4,6 +4,7 @@
 注意：BM25Retriever 使用 class-level 共享索引，测试间的重置由 tests/conftest.py 的
 autouse fixture 保证。
 """
+
 from unittest.mock import patch
 
 from docs_seeker.core.config import settings
@@ -32,9 +33,11 @@ class FakeMilvus:
 
 
 def _retriever(fake: FakeMilvus) -> BM25Retriever:
-    with patch("docs_seeker.infrastructure.retrieval.bm25_retriever.get_milvus_store", return_value=fake), \
-         patch.object(settings, "bm25_refresh_seconds", 0), \
-         patch.object(settings, "bm25_max_docs", 100):
+    with (
+        patch("docs_seeker.infrastructure.retrieval.bm25_retriever.get_milvus_store", return_value=fake),
+        patch.object(settings, "bm25_refresh_seconds", 0),
+        patch.object(settings, "bm25_max_docs", 100),
+    ):
         return BM25Retriever()
 
 
@@ -59,6 +62,25 @@ def test_lazy_build_only_once():
     assert BM25Retriever._shared_built is True
 
 
+def test_meta_filter_restricts_candidates():
+    """元数据过滤在 BM25 侧是进程内谓词：只对匹配前缀的文档计分"""
+    r = _retriever(FakeMilvus(DOCS_A))
+    chunks = r.search("文档检索", top_k=5, meta_filter={"chapter": ["第二章"]})
+    assert [c.text for c in chunks] == [DOCS_A[1]["text"]]
+
+
+def test_meta_filter_no_match_returns_empty():
+    """过滤后无候选 → 返回空（由 CompositeRetriever 决定是否回退全量检索）"""
+    r = _retriever(FakeMilvus(DOCS_A))
+    assert r.search("文档检索", top_k=5, meta_filter={"chapter": ["第三章"]}) == []
+
+
+def test_without_meta_filter_all_docs_scored():
+    r = _retriever(FakeMilvus(DOCS_A))
+    chunks = r.search("文档检索", top_k=5)
+    assert len(chunks) == 2
+
+
 def test_refresh_rebuilds_on_count_change():
     fake = FakeMilvus(DOCS_A)
     r = _retriever(fake)
@@ -70,7 +92,9 @@ def test_refresh_rebuilds_on_count_change():
     # 显式把上次检查时间归零，模拟新鲜度窗口已过期（否则真实 monotonic 大于
     # 下面 patch 的 9999.0，窗口判定会提前 return）
     BM25Retriever._shared_last_checked_at = 0.0
-    with patch.object(settings, "bm25_refresh_seconds", 1), \
-         patch("docs_seeker.infrastructure.retrieval.bm25_retriever.time.monotonic", return_value=9999.0):
+    with (
+        patch.object(settings, "bm25_refresh_seconds", 1),
+        patch("docs_seeker.infrastructure.retrieval.bm25_retriever.time.monotonic", return_value=9999.0),
+    ):
         r.search("新入库", top_k=5)
     assert BM25Retriever._shared_doc_count == len(DOCS_B)

@@ -7,6 +7,7 @@ from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.domain.models.query import Query
 from docs_seeker.domain.services.generator import Generator
 from docs_seeker.infrastructure.retrieval.composite_retriever import CompositeRetriever
+from docs_seeker.infrastructure.retrieval.metadata_filter import parse_question_metadata
 from docs_seeker.infrastructure.retrieval.query_decomposer import QueryDecomposer
 
 
@@ -40,10 +41,16 @@ class RAGPipeline:
         q: Query = self.decomposer.decompose(question)
         sub_questions = q.sub_queries or [question]
 
+        # 结构化元数据过滤：从**原问题**解析（子问题是改写，条号常被丢掉），
+        # 再对所有子问题统一生效。解析不出结构词 → None → 检索走旧行为。
+        meta_filter = parse_question_metadata(question) or None
+        if meta_filter:
+            logger.info(f"结构化元数据过滤: {meta_filter}")
+
         # 对每个子问题检索并合并
         all_chunks: list[Chunk] = []
         for sq in sub_questions:
-            all_chunks.extend(self.retriever.search(sq, top_k=top_k, use_summary=use_summary))
+            all_chunks.extend(self.retriever.search(sq, top_k=top_k, use_summary=use_summary, meta_filter=meta_filter))
 
         # 按 id 去重（与重构前行为一致：无 id 的 chunk 视为同一批）
         seen: set[str] = set()
