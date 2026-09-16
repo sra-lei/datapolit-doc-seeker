@@ -51,6 +51,8 @@ def chat(req: ChatRequest):
             sources=[SourceDoc(**s) for s in result.sources],
             cached=result.cached,
             query_decomposed=result.query_decomposed,
+            agent_steps=result.agent_steps,
+            agent_sufficient=result.agent_sufficient,
         )
 
     return StreamingResponse(

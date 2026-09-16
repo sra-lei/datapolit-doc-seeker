@@ -1,6 +1,6 @@
 """docs-seeker - 问答用例服务"""
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 from langfuse import get_client, observe, propagate_attributes
 from loguru import logger
@@ -26,6 +26,8 @@ class ChatResult:
     sources: list[dict] = field(default_factory=list)
     cached: bool = False
     query_decomposed: list[str] | None = None
+    agent_steps: list[dict] | None = None  # agent 路径的可审计 trace；旧管线为 None
+    agent_sufficient: bool | None = None   # agent 路径：是否主动拒答（证据不足）
 
 
 class ChatService:
@@ -38,11 +40,15 @@ class ChatService:
         decomposer: QueryDecomposer | None = None,
         cache: SemanticCache | None = None,
         usage_tracker: UsageTracker | None = None,
+        agent_runner=None,
     ):
         # 允许注入共享依赖（deps 组装点传入）；缺省时自建/走全局单例（独立使用场景）
         self.pipeline = RAGPipeline(retriever=retriever, decomposer=decomposer, generator=generator)
         self.cache = cache or get_semantic_cache()
         self.usage_tracker = usage_tracker or get_usage_tracker()
+        # Agentic M1：默认关闭（settings.agent_enabled）；开启后 agent 路径任何异常
+        # 都回退下面的旧单轮管线，保证可灰度可回退
+        self.agent_runner = agent_runner
 
     @observe(name=TRACE_NAME, capture_input=False, capture_output=False)
     def chat(
@@ -91,9 +97,28 @@ class ChatService:
                         cached=True,
                     )
 
-            answer, confidence, chunks, sub_questions = self.pipeline.run(
-                question, top_k=top_k, conversation_history=history
-            )
+            sub_questions: list[str] = []
+            agent_steps: list[dict] | None = None
+            agent_sufficient: bool | None = None
+            if settings.agent_enabled and self.agent_runner is not None:
+                try:
+                    ar = self.agent_runner.run(question, top_k=top_k)
+                    answer, confidence, chunks = ar.answer, ar.confidence, ar.evidence
+                    agent_steps = [asdict(s) for s in ar.steps]
+                    agent_sufficient = ar.sufficient
+                    logger.info(
+                        f"Agent 路径完成: steps={len(ar.steps)} evidence={len(ar.evidence)} "
+                        f"sufficient={ar.sufficient}"
+                    )
+                except Exception as e:  # noqa: BLE001 — 回退契约：编排/网关任何异常都落回旧管线
+                    logger.warning(f"Agent 路径失败，回退旧单轮管线: {type(e).__name__}: {e}")
+                    answer, confidence, chunks, sub_questions = self.pipeline.run(
+                        question, top_k=top_k, conversation_history=history
+                    )
+            else:
+                answer, confidence, chunks, sub_questions = self.pipeline.run(
+                    question, top_k=top_k, conversation_history=history
+                )
             answer = sanitize_output(answer)
             source_dicts = [{k: v for k, v in chunk.to_dict().items() if k in CACHE_FIELDS} for chunk in chunks]
 
@@ -110,6 +135,8 @@ class ChatService:
                 confidence=confidence,
                 sources=source_dicts,
                 query_decomposed=sub_questions if len(sub_questions) > 1 else None,
+                agent_steps=agent_steps,
+                agent_sufficient=agent_sufficient,
             )
 
     @observe(name=TRACE_NAME, capture_input=False, capture_output=False)

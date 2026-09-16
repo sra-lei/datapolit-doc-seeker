@@ -79,9 +79,16 @@ class Settings(BaseSettings):
     llm_decompose_temperature: float = 0.1
 
     # 生成层模型覆盖（空 = 用 LLM_MODEL，即旧行为）。分层模型路由：答案生成用
-    # 非推理模型（如 deepseek-chat）降延迟/降成本，而「查询改写」仍用 LLM_MODEL
+    # 非推理模型（如 deepseek-chat）降延迟/降成本，而「判断/改写」仍用 LLM_MODEL
     # 指定的推理模型——本语料是抽取式的，推理模型在生成环节的增益尚未证明。
     llm_generate_model: str = ""
+
+    # ---- Agentic RAG（M1：默认关闭，旧单轮管线零改动；异常自动回退旧管线）----
+    agent_enabled: bool = False
+    agent_max_steps: int = 4  # 单问最大「思考→工具」步数（不含最终成文）
+    # 循环内判断调用短超时复用 llm_judge_timeout_seconds（见上）
+    agent_judge_max_tokens: int = 500  # 思考/动作 JSON 的生成长度
+    agent_evidence_char_budget: int = 12000  # 成文前累计证据的总字符预算
 
 
 settings = Settings()

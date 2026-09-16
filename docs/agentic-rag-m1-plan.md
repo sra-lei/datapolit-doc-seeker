@@ -499,3 +499,30 @@ check_injection → 语义缓存(阈值 0.92) → QueryDecomposer(LLM 拆 2~4 �
 3. **旧评估集（T001~T022）绑定旧语料，不能用来评新语料**。
 
 **对 M1 的影响**：§十二 的结论不变（扩题是硬前置），但出题对象换成新语料；且语料从"单份 PDF"变成"8 个章级文档"，**跨章节多跳题更有料**（例：同一合规要求在美国站/欧洲站/日本站的差异——天然的条件+例外题）。
+
+
+---
+
+## 十四、M1 首个代码切片落地记录（2026-09-17）
+
+**范围（默认关闭，旧管线零改动）**：`src/docs_seeker/agent/` agent 包（与对话循环骨架合并后的位置；原 `domain/agent/` 已迁入）；`AGENT_ENABLED=false` 灰度开关；chat_service if/else 分流，agent 路径任何异常（含 `AllModelsFailedError`）自动回退旧单轮 RAG。LLM 调用统一走 `LLMRequest` 实体，短超时复用 `llm_judge_timeout_seconds`。
+
+| 模块 | 内容 |
+|---|---|
+| `models.py` | 与对话循环骨架合并：`Role` 枚举、`LLMMessage`（content/reasoning/tool_calls/finish_reason，reasoning 只入 trace 不回灌）、`AgentStep`（thought/action/action_input/**observation**/error/elapsed_ms）、`AgentResult`（answer/confidence/steps/evidence/sufficient/used_fallback） |
+| `adapter.py` | OpenAI 响应 → 中立 `LLMMessage`，隔离 vendor 字段 |
+| `tools.py` | M1 两运行时工具：`retrieve`（三路混合检索）、`lookup_article`（结构词解析 + meta_filter + 本地谓词剔除编号不匹配的回退结果）；证据片段 350 字；另保留骨架的 search/translate `TOOL_SCHEMAS`（M2 native 占位） |
+| `prompts.py` | content-JSON 协议（非 native tool calling，模型可移植）；三段提示：决策 SYSTEM / 成文 COMPOSE / 判不够时的 VERIFY |
+| `runner.py` | ReAct 循环：JSON 解析失败喂回自纠（连续 2 次抛 AgentError）、最多 4 步、证据跨轮按 id 去重、步数耗尽不丢证据（有则强制成文/无则拒答） |
+| gateway | 统一 `LLMRequest` 实体（含 `timeout`/`model` 覆盖）；重试/熔断/主备降级仍全部在 gateway，agent 不重复；决策调用短超时 `llm_judge_timeout_seconds=20s` |
+| API | `ChatResponse` 新增 `agent_steps`（可审计 trace），旧字段不变 |
+
+**防 false abstain 的两段式裁决**：决策代理只负责"够不够"的初判；判不够时成文模型走 VERIFY_PROMPT 独立核实——资料里其实有答案就正常作答（输出无 `ABSTAIN:` 前缀 → sufficient 纠正为 true），确实没有才拒答。真服务冒烟曾出现证据已召回但决策代理误判（T26 库龄门槛），该机制纠正后三站门槛全部答对并附引用。
+
+**真服务冒烟（deepseek-v4-flash 决策 + deepseek-chat 成文，temp=0）**：
+- T26（美/加/日库龄门槛，枚举+多站点）：4 步检索、证据去重后 12 条，69s，答案正确带引用，sufficient=true（修复前误拒答）。
+- T27（TikTok Shop 佣金，域外拒答）：3 步换表述检索后拒答，15.8s，措辞干净不硬编。
+- 单测 95 passed（含 agent 9 用例），ruff 干净。
+- 与本机会话的 4 个提交（infra 重命名、`LLMRequest`、agent 骨架、JSON 日志）rebase 合并：agent 代码落 `src/docs_seeker/agent/`，模型与骨架合并，超时统一 `llm_judge_timeout_seconds`。
+
+**已知代价/后续**：多步调用使复杂题延迟显著上升（单轮 ~8s → 多步 ~70s）；M1 先保正确性，延迟优化（决策模型更快/更少步数、简单题直答短路）放 A/B 之后。下一步：跑 v2 全量 A/B（agent 关 vs 开，同集同口径），重点看 T23 类召回缺口是否被换表述检索补上、简单事实题是否退化。

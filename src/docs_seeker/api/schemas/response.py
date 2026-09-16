@@ -15,12 +15,25 @@ class SourceDoc(BaseModel):
     sources: list[str] = []
 
 
+class AgentStepInfo(BaseModel):
+    idx: int
+    thought: str = ""
+    action: str
+    action_input: dict = {}
+    observation: str = ""
+    elapsed_ms: int = 0
+    error: str | None = None
+
+
 class ChatResponse(BaseModel):
     answer: str
     confidence: str = "medium"
     sources: list[SourceDoc] = []
     cached: bool = False
     query_decomposed: list[str] | None = None
+    # Agentic M1：旧管线两个字段都为 None，客户端按 None 判断走旧展示
+    agent_steps: list[AgentStepInfo] | None = None
+    agent_sufficient: bool | None = None
 
 
 class HealthResponse(BaseModel):

@@ -1,5 +1,6 @@
 """docs-seeker - 依赖注入（组装点，管理全应用单例）"""
 
+from docs_seeker.agent.runner import AgentRunner
 from docs_seeker.domain.services.chat_service import ChatService
 from docs_seeker.domain.services.generator import Generator
 from docs_seeker.infra.cache.semantic_cache import get_semantic_cache
@@ -14,6 +15,7 @@ _generator: Generator | None = None
 _query_decomposer: QueryDecomposer | None = None
 _hybrid_router: HybridRouter | None = None
 _chat_service: ChatService | None = None
+_agent_runner: AgentRunner | None = None
 
 
 def get_composite_retriever() -> CompositeRetriever:
@@ -44,6 +46,17 @@ def get_hybrid_router() -> HybridRouter:
     return _hybrid_router
 
 
+def get_agent_runner() -> AgentRunner:
+    """Agentic M1：复用单例 LLM 网关与混合检索器（含同一份 BM25 索引）。"""
+    global _agent_runner
+    if _agent_runner is None:
+        _agent_runner = AgentRunner(
+            llm=get_llm_gateway(),
+            retriever=get_composite_retriever(),
+        )
+    return _agent_runner
+
+
 def get_chat_service() -> ChatService:
     global _chat_service
     if _chat_service is None:
@@ -55,5 +68,6 @@ def get_chat_service() -> ChatService:
             decomposer=get_query_decomposer(),
             cache=get_semantic_cache(),
             usage_tracker=get_usage_tracker(),
+            agent_runner=get_agent_runner(),
         )
     return _chat_service
