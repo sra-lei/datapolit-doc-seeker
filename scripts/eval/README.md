@@ -62,6 +62,25 @@ uv run python scripts/eval/run_local_baseline.py `
 判分口径复刻 core：关键词**纯子串**命中率；`expected_chapter` 不匹配 ×0.7；
 空答案 0 分；`score ≥ 0.8` 算通过。
 
+**拒答题（本工具包对 core 判分的扩展）**：用例带 `"expected_answer_type": "abstain"` 时，
+系统**空答案或明确表示语料不足**（"未提及/没有相关/无法回答…"等 30+ 措辞）→ 1.0；
+硬编答案 → 0.0（结果里标 `HALLUCINATED`）。汇总行单独输出「拒答正确率」（Agentic M1 核心指标）。
+局限：当前只认措辞，不认"先否认再硬编"——M1 充分性判断上线后收紧。
+
+## 用例文件格式
+
+```json
+[
+  {"case_id": "T001", "question": "...", "expected_keywords": ["原文连续短语"],
+   "expected_chapter": "第三章", "category": "事实查询"},
+  {"case_id": "T027", "question": "语料里没有答案的问题...", "expected_keywords": [],
+   "expected_chapter": null, "category": "拒答", "expected_answer_type": "abstain"}
+]
+```
+
+- 关键词必须逐词是**原文连续子串**、≥2 字（T008 单字关键词教训）；出题后用原文检索逐题核对
+- `eval-set-v2.json`：亚马逊卖家侧语料（`chartermate_docs_insightforge`），30 题（26 可答 + 4 拒答）
+
 ## 纪律（别省）
 
 - **温度必须 0**：否则同代码同语料单题摆幅可达 0.75，改动读不出来

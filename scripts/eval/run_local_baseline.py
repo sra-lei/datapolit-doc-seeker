@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -40,13 +41,40 @@ CORE = 'http://127.0.0.1:3002/core/eval'
 DEFAULT_OUT = Path('eval-runs')
 
 
+# 拒答题（expected_answer_type=abstain）判分：系统明确表示语料不足即正确。
+# 注：启发式——只认"拒答措辞"，M1 做充分性判断后再收紧（防"先否认再硬编"）。
+ABSTAIN_MARKERS = (
+    '没有提及', '未提及', '没有相关', '无相关', '未找到', '无法找到', '没有找到', '找不到',
+    '无法回答', '未能回答', '未包含', '不包含', '没有包含', '没有涉及', '未涉及', '不涉及',
+    '没有规定', '未规定', '没有说明', '未说明', '暂无相关', '未收录', '没有收录', '无法确定',
+    '未能找到', '没有提供', '未提供', '无法基于', '不足以', '语料中没有', '语料中未', '文档中没有', '资料中没有',
+)
+
+
+def judge_abstain(answer: str):
+    """拒答题：空答案或含拒答措辞 → 1.0；否则（硬编）→ 0.0。"""
+    if not answer:
+        return 1.0, 'empty'
+    norm_answer = _norm(answer)
+    hit = next((m for m in ABSTAIN_MARKERS if _norm(m) in norm_answer), None)
+    return (1.0, f'marker:{hit}') if hit else (0.0, None)
+
+
+def _norm(text: str) -> str:
+    """归一化后再做子串判分：去掉 markdown 强调符（**5%** 会打断连续短语）、
+    空格/制表符（中文排版里数字两侧空格不稳定，如 '2022 年 7 月' vs '2022年7月'）。
+    只影响判分匹配，落盘答案仍是原文。"""
+    return re.sub(r'[\s*_`~]+', '', text or '')
+
+
 def judge(answer: str, sources: list[dict], expected_kw: list[str], expected_chapter: str | None):
-    found = [kw for kw in expected_kw if kw in answer]
+    norm_answer = _norm(answer)
+    found = [kw for kw in expected_kw if _norm(kw) in norm_answer]
     score = len(found) / max(1, len(expected_kw))
     chapter_match = None
     if expected_chapter:
-        chapter_match = expected_chapter in answer or any(
-            expected_chapter in str(s.get('chapter') or '') for s in sources
+        chapter_match = _norm(expected_chapter) in norm_answer or any(
+            _norm(expected_chapter) in _norm(str(s.get('chapter') or '')) for s in sources
         )
         if not chapter_match:
             score *= 0.7
@@ -103,16 +131,25 @@ def main() -> int:
             answer, sources = result.answer or '', result.sources or []
         except Exception as exc:  # 单题失败不拖垮整批
             return {'case_id': case['case_id'], 'question': case['question'], 'category': case.get('category'),
+                    'expected_answer_type': 'abstain' if case.get('expected_answer_type') == 'abstain' else 'answer',
                     'error': f'{type(exc).__name__}: {exc}', 'answer': '', 'sources': [],
                     'score': 0.0, 'passed': False, 'elapsed': round(time.time() - t0, 2)}
-        found, score, chapter_match = judge(
-            answer, sources, case.get('expected_keywords') or [], case.get('expected_chapter')
-        )
+        is_abstain = case.get('expected_answer_type') == 'abstain'
+        abstain_detail = None
+        if is_abstain:
+            score, abstain_detail = judge_abstain(answer)
+            found, chapter_match = [], None
+        else:
+            found, score, chapter_match = judge(
+                answer, sources, case.get('expected_keywords') or [], case.get('expected_chapter')
+            )
         return {
             'case_id': case['case_id'], 'question': case['question'], 'category': case.get('category'),
+            'expected_answer_type': 'abstain' if is_abstain else 'answer',
             'expected_keywords': case.get('expected_keywords') or [],
             'expected_chapter': case.get('expected_chapter'),
             'keywords_found': found, 'keyword_count': len(found), 'chapter_match': chapter_match,
+            'abstain_detail': abstain_detail,
             'source_count': len(sources), 'score': score, 'passed': score >= 0.8,
             'elapsed': round(time.time() - t0, 2), 'answer': answer,
             'sources_head': [{'source': s.get('source'), 'chapter': s.get('chapter')} for s in sources[:3]],
@@ -133,12 +170,20 @@ def main() -> int:
     print(f'通过 {passed}/{len(results)} = {passed / len(results) * 100:.1f}% | 均分 {avg:.3f}')
     print(f'平均耗时 {sum(r["elapsed"] for r in results) / len(results):.1f}s | '
           f'空答案 {sum(1 for r in results if not r["answer"])} 条')
+    abst = [r for r in results if r.get('expected_answer_type') == 'abstain']
+    if abst:
+        ok = sum(1 for r in abst if r['passed'])
+        print(f'拒答正确率: {ok}/{len(abst)}（M1 核心指标基线）')
     for cat, scores in sorted(by_cat.items()):
         print(f'  {cat}: n={len(scores)} 均分={sum(scores) / len(scores):.3f}')
     for r in results:
+        if r.get('expected_answer_type') == 'abstain':
+            tag = f"abstain={r.get('abstain_detail') or 'HALLUCINATED'}"
+        else:
+            tag = (f"kw={r.get('keyword_count')}/{len(r.get('expected_keywords') or [])} "
+                   f"chap={r.get('chapter_match')}")
         print(f"  {'✅' if r['passed'] else '❌'} {r['case_id']} {r['score']:.2f} "
-              f"kw={r.get('keyword_count')}/{len(r.get('expected_keywords') or [])} "
-              f"chap={r.get('chapter_match')} src={r.get('source_count')} {r['elapsed']:5.1f}s | {r['question'][:26]}")
+              f"{tag} src={r.get('source_count')} {r['elapsed']:5.1f}s | {r['question'][:26]}")
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -146,9 +191,11 @@ def main() -> int:
     path.write_text(json.dumps({
         'label': args.label,
         'params': {'set_id': args.set_id, 'top_k': args.top_k, 'workers': args.workers,
-                   'use_cache': False, 'stream': False, 'judge': 'core-eval-replica',
+                   'use_cache': False, 'stream': False, 'judge': 'core-eval-replica+abstain-ext',
                    **llm_params},
         'total': len(results), 'passed': passed, 'avg_score': round(avg, 4),
+        'abstain_correct': sum(1 for r in results if r.get('expected_answer_type') == 'abstain' and r['passed']),
+        'abstain_total': sum(1 for r in results if r.get('expected_answer_type') == 'abstain'),
         'category_stats': {c: {'n': len(s), 'avg': round(sum(s) / len(s), 4)} for c, s in by_cat.items()},
         'results': results,
     }, ensure_ascii=False, indent=2), encoding='utf-8')

@@ -1,0 +1,322 @@
+{
+ "set_name": "eval-set-v2-amazon-seller",
+ "corpus": "chartermate_docs_insightforge",
+ "note": "亚马逊卖家侧语料 150 篇/8 章；T01-T26 可答题，T27-T30 拒答题(expected_answer_type=abstain)",
+ "cases": [
+  {
+   "case_id": "T01",
+   "question": "我准备注册亚马逊卖家账户，身份验证时对上传的营业执照和法人身份证照片有什么具体要求？",
+   "expected_keywords": [
+    "彩色照片或彩色扫描件",
+    "完整清晰可读",
+    "不接受截屏",
+    "法定代表人身份信息"
+   ],
+   "expected_chapter": "第一章",
+   "category": "事实查询"
+  },
+  {
+   "case_id": "T02",
+   "question": "我是中国卖家，在日本站没有上传JCT注册号，还能继续在亚马逊上销售商品吗？会有什么影响？",
+   "expected_keywords": [
+    "可以继续在亚马逊进行销售",
+    "不再购买您的商品",
+    "无法申请税务抵扣"
+   ],
+   "expected_chapter": "第一章",
+   "category": "理解推理"
+  },
+  {
+   "case_id": "T03",
+   "question": "德国站卖家如果未在2022年6月15日前上传并验证德国包装法注册号（LUCID号），亚马逊会采取什么措施？如果到6月30日仍未上传呢？",
+   "expected_keywords": [
+    "开始屏蔽不符合要求的商品",
+    "暂时停售",
+    "所有商品"
+   ],
+   "expected_chapter": "第一章",
+   "category": "事实查询"
+  },
+  {
+   "case_id": "T04",
+   "question": "欧洲站卖家在开售后，店铺账户收款接近多少欧元时会被要求提供更多资料进行KYC审核？",
+   "expected_keywords": [
+    "15,000欧元",
+    "收款接近"
+   ],
+   "expected_chapter": "第一章",
+   "category": "事实查询"
+  },
+  {
+   "case_id": "T05",
+   "question": "根据《消费者告知法案》，亚马逊会通过哪几个渠道通知卖家进行验证？",
+   "expected_keywords": [
+    "账户状况",
+    "账户信息",
+    "邮件"
+   ],
+   "expected_chapter": "第一章",
+   "category": "综合概括"
+  },
+  {
+   "case_id": "T06",
+   "question": "冰球面部保护罩的B1型、B2型、C型和D1型分别适用于哪些球员？",
+   "expected_keywords": [
+    "任何年龄段的非守门员",
+    "10岁或10岁以下的非守门员",
+    "18岁或18岁以上",
+    "任何年龄段的守门员"
+   ],
+   "expected_chapter": "第一章",
+   "category": "综合概括"
+  },
+  {
+   "case_id": "T07",
+   "question": "卖家在什么情况下才可以在每个商品销售地区保留多个亚马逊卖家平台账户？",
+   "expected_keywords": [
+    "合理业务需要",
+    "所有账户均信誉良好",
+    "保留一个卖家平台账户"
+   ],
+   "expected_chapter": "第七章",
+   "category": "事实查询"
+  },
+  {
+   "case_id": "T08",
+   "question": "如果卖家在美国站点因版权侵权被投诉，但认为投诉内容并未侵权，可以通过什么法律途径提交反通知？",
+   "expected_keywords": [
+    "数字千年版权法",
+    "DMCA反通知",
+    "仅适用于版权"
+   ],
+   "expected_chapter": "第七章",
+   "category": "概念查询"
+  },
+  {
+   "case_id": "T09",
+   "question": "从2022年4月1日起，卖家继续向亚马逊运营中心发送哪3种货件可能会被拒收，并可能被暂停发送其他货件的权限？",
+   "expected_keywords": [
+    "批准入库计划后删除货件",
+    "按错误的路线发送货件",
+    "发送不完整的货件"
+   ],
+   "expected_chapter": "第三章",
+   "category": "综合概括"
+  },
+  {
+   "case_id": "T10",
+   "question": "亚马逊美国站FBA配送费从2022年4月28日起在每单位费率基础上加收多少比例的燃油和通货膨胀附加费？",
+   "expected_keywords": [
+    "5%的燃油和通货膨胀附加费",
+    "4月28日"
+   ],
+   "expected_chapter": "第三章",
+   "category": "事实查询"
+  },
+  {
+   "case_id": "T11",
+   "question": "通过泛欧库存加速器（COS）开启Pan-EU后，如果卖家只有法国、意大利或西班牙其中任意一国VAT号，库存可以存放在哪些国家？",
+   "expected_keywords": [
+    "法国、意大利和西班牙",
+    "暂时无法存放在德国"
+   ],
+   "expected_chapter": "第三章",
+   "category": "事实查询"
+  },
+  {
+   "case_id": "T12",
+   "question": "2024年美国站，定价低于15美金的服装类商品销售佣金从多少降至多少？",
+   "expected_keywords": [
+    "17%降至5%",
+    "定价低于15美金"
+   ],
+   "expected_chapter": "第三章",
+   "category": "事实查询"
+  },
+  {
+   "case_id": "T13",
+   "question": "泛欧库存加速器（COS）的运作逻辑是什么？",
+   "expected_keywords": [
+    "亚马逊先购买您的库存",
+    "转售给他们"
+   ],
+   "expected_chapter": "第三章",
+   "category": "概念查询"
+  },
+  {
+   "case_id": "T14",
+   "question": "2022年起在亚马逊德国站销售，如果无法证明符合EPR要求，亚马逊会怎么处理？包装和电气电子设备分别从什么时候开始执行？",
+   "expected_keywords": [
+    "暂停您在EPR商品分类下发布的不合规商品",
+    "2022年7月1日",
+    "2023年1月1日"
+   ],
+   "expected_chapter": "第二章",
+   "category": "事实查询"
+  },
+  {
+   "case_id": "T15",
+   "question": "亚马逊法国站卖家如果没有提交有效的UIN，亚马逊会代表卖家做什么？会收取服务费吗？",
+   "expected_keywords": [
+    "代您准备申报报告",
+    "支付适用的环保款项",
+    "亚马逊近期不会对该服务收取服务费"
+   ],
+   "expected_chapter": "第二章",
+   "category": "理解推理"
+  },
+  {
+   "case_id": "T16",
+   "question": "根据2024版Listing打分标准，新增了哪些重点得分项？得分多少分以上才算完整度合格的Listing？",
+   "expected_keywords": [
+    "关键属性全都填写",
+    "标题以品牌名开头",
+    "图片信息完善度",
+    "80分以上"
+   ],
+   "expected_chapter": "第二章",
+   "category": "综合概括"
+  },
+  {
+   "case_id": "T17",
+   "question": "欧洲站卖家如果促销因为近期最低价被禁止显示，唯一可行的解除操作是什么？",
+   "expected_keywords": [
+    "低于近期最低价",
+    "选择使用优惠券"
+   ],
+   "expected_chapter": "第五章",
+   "category": "事实查询"
+  },
+  {
+   "case_id": "T18",
+   "question": "2023年美国站Prime会员日秒杀价格需要同时满足哪两个要求？",
+   "expected_keywords": [
+    "基准价",
+    "至少8折",
+    "低于或匹配过去30天最低价"
+   ],
+   "expected_chapter": "第五章",
+   "category": "综合概括"
+  },
+  {
+   "case_id": "T19",
+   "question": "为什么Kevin的优惠券预算560美金，实际使用金额却达到616美金？",
+   "expected_keywords": [
+    "预算剩至20%",
+    "自动下架",
+    "30分钟即失效"
+   ],
+   "expected_chapter": "第五章",
+   "category": "理解推理"
+  },
+  {
+   "case_id": "T20",
+   "question": "新卖家入门大礼包中，针对品牌商品销售额提供的5%返还，最高金额是多少？",
+   "expected_keywords": [
+    "5%销售额返还",
+    "最高可达5万美元"
+   ],
+   "expected_chapter": "第八章",
+   "category": "事实查询"
+  },
+  {
+   "case_id": "T21",
+   "question": "亚马逊卖家钱包的付款功能支持以美元支付哪些地区的供应商？",
+   "expected_keywords": [
+    "美国当地供应商",
+    "中国香港供应商"
+   ],
+   "expected_chapter": "第八章",
+   "category": "事实查询"
+  },
+  {
+   "case_id": "T22",
+   "question": "2022年亚马逊日本站对小号和标准尺寸-1商品的物流配送费用分别降低了多少日元？",
+   "expected_keywords": [
+    "降低2日元",
+    "63日元"
+   ],
+   "expected_chapter": "第六章",
+   "category": "事实查询"
+  },
+  {
+   "case_id": "T23",
+   "question": "亚马逊全球收款新卖家护航计划中，卖家使用联合账户连接北美、欧洲和日本账户时，费率是根据什么计算的？",
+   "expected_keywords": [
+    "净销售金额总和",
+    "联合账户"
+   ],
+   "expected_chapter": "第六章",
+   "category": "概念查询",
+   "known_note": "baseline 检索未召回（原文含错别字'3各站点'），系统正确拒答；M1 覆盖度改进目标题"
+  },
+  {
+   "case_id": "T24",
+   "question": "亚马逊自配送卖家的取消率指标要求维持在什么水平以下？如果超过会有什么风险？",
+   "expected_keywords": [
+    "低于2.5%",
+    "停用的风险"
+   ],
+   "expected_chapter": "第四章",
+   "category": "事实查询"
+  },
+  {
+   "case_id": "T25",
+   "question": "什么是亚马逊的退货服务提供商计划（RP）？它能为卖家提供什么帮助？",
+   "expected_keywords": [
+    "退货服务提供商计划",
+    "本土仓库地址",
+    "降低卖家的退货成本"
+   ],
+   "expected_chapter": "第四章",
+   "category": "概念查询"
+  },
+  {
+   "case_id": "T26",
+   "question": "亚马逊美国站、加拿大站和日本站的库龄分别超过多久会被收取超龄库存附加费？",
+   "expected_keywords": [
+    "6个月",
+    "9个月",
+    "365天"
+   ],
+   "expected_chapter": "第三章",
+   "category": "综合概括"
+  },
+  {
+   "case_id": "T27",
+   "question": "TikTok Shop 美国站的销售佣金费率是多少？",
+   "expected_keywords": [],
+   "expected_chapter": null,
+   "category": "拒答",
+   "expected_answer_type": "abstain",
+   "abstain_note": "域外·跨平台，语料只覆盖亚马逊"
+  },
+  {
+   "case_id": "T28",
+   "question": "亚马逊 Prime 会员包含哪些视频流媒体权益？",
+   "expected_keywords": [],
+   "expected_chapter": null,
+   "category": "拒答",
+   "expected_answer_type": "abstain",
+   "abstain_note": "域外·买家侧，语料只覆盖卖家侧"
+  },
+  {
+   "case_id": "T29",
+   "question": "我发往亚马逊运营中心的商品在仓库里被虫鼠咬坏了，亚马逊会怎么赔偿？",
+   "expected_keywords": [],
+   "expected_chapter": null,
+   "category": "拒答",
+   "expected_answer_type": "abstain",
+   "abstain_note": "域内·FBA 残损赔偿话题语料未覆盖"
+  },
+  {
+   "case_id": "T30",
+   "question": "亚马逊要求卖家购买的商业责任保险，最低保额是多少美元？",
+   "expected_keywords": [],
+   "expected_chapter": null,
+   "category": "拒答",
+   "expected_answer_type": "abstain",
+   "abstain_note": "域内·卖家保险话题语料未覆盖（100万美元仅出现在新卖家礼包语境）"
+  }
+ ]
+}
