@@ -14,6 +14,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from docs_seeker.core.config import Settings, settings
+from docs_seeker.domain.interfaces.llm import LLMRequest
 from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.domain.services.generator import Generator
 from docs_seeker.infra import llm as llm_pkg
@@ -49,14 +50,14 @@ def test_class_default_is_empty_so_behaviour_is_unchanged():
 def test_gateway_model_override_wins(monkeypatch):
     sink = _gateway_with_fake_client(monkeypatch)
     gw = gateway_module.LLMGateway()
-    gw.generate(messages=[{"role": "user", "content": "x"}], max_tokens=100, model="deepseek-chat")
+    gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], max_tokens=100, model="deepseek-chat"))
     assert sink[0]["model"] == "deepseek-chat"
 
 
 def test_gateway_without_override_uses_primary_model(monkeypatch):
     sink = _gateway_with_fake_client(monkeypatch)
     gw = gateway_module.LLMGateway()
-    gw.generate(messages=[{"role": "user", "content": "x"}], max_tokens=100)
+    gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], max_tokens=100))
     assert sink[0]["model"] == gw.primary_model
 
 

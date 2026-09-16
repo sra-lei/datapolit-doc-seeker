@@ -16,6 +16,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from docs_seeker.core.config import Settings, settings
+from docs_seeker.domain.interfaces.llm import LLMRequest
 from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.domain.services.generator import Generator
 from docs_seeker.infra.retrieval.query_decomposer import QueryDecomposer
@@ -28,8 +29,15 @@ class RecordingLLM:
         self.content = content
         self.calls: list[dict] = []
 
-    def generate(self, messages, max_tokens=600, temperature=0.3, stream=False, name="llm-call", model=None):
-        self.calls.append({"temperature": temperature, "max_tokens": max_tokens, "name": name, "model": model})
+    def generate(self, request: LLMRequest):
+        self.calls.append(
+            {
+                "temperature": request.temperature,
+                "max_tokens": request.max_tokens,
+                "name": request.name,
+                "model": request.model,
+            }
+        )
         return SimpleNamespace(
             choices=[SimpleNamespace(message=SimpleNamespace(content=self.content), finish_reason="stop")]
         )

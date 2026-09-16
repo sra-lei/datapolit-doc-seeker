@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from docs_seeker.core.config import settings
+from docs_seeker.domain.interfaces.llm import LLMRequest
 from docs_seeker.infra import llm as llm_pkg
 
 gateway_module = llm_pkg.gateway
@@ -52,15 +53,27 @@ def patch_client(monkeypatch):
 def test_gateway_uses_configured_timeout(patch_client) -> None:
     sink = patch_client()
     gw = gateway_module.LLMGateway()
-    gw.generate(messages=[{"role": "user", "content": "x"}], max_tokens=100)
+    gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], max_tokens=100))
     assert sink[0]["timeout"] == settings.llm_timeout_seconds
     assert settings.llm_timeout_seconds >= 60  # 推理模型兜底：不得回落到 15s 这类短超时
+
+
+def test_gateway_timeout_override_wins(patch_client) -> None:
+    """判断类调用传短超时：覆盖全局 120s，避免 agent 循环被卡死"""
+    sink = patch_client()
+    gw = gateway_module.LLMGateway()
+    gw.generate(
+        LLMRequest(
+            messages=[{"role": "user", "content": "x"}], max_tokens=100, timeout=settings.llm_judge_timeout_seconds
+        )
+    )
+    assert sink[0]["timeout"] == settings.llm_judge_timeout_seconds
 
 
 def test_gateway_retries_then_succeeds(patch_client, monkeypatch) -> None:
     sink = patch_client(fail_times=1)
     monkeypatch.setattr(gateway_module.time, "sleep", lambda _s: None)  # 跳过退避等待
     gw = gateway_module.LLMGateway()
-    gw.generate(messages=[{"role": "user", "content": "x"}], max_tokens=100)
+    gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], max_tokens=100))
     assert len(sink) == 2  # 首次超时 → 重试一次成功
     assert all(call["timeout"] == settings.llm_timeout_seconds for call in sink)

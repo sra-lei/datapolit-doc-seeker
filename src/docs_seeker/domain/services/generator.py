@@ -3,7 +3,7 @@
 from loguru import logger
 
 from docs_seeker.core.config import prompts, settings
-from docs_seeker.domain.interfaces.llm import LLMProvider
+from docs_seeker.domain.interfaces.llm import LLMProvider, LLMRequest
 from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.infra.llm.gateway import get_llm_gateway
 
@@ -38,23 +38,36 @@ class Generator:
         messages.append({"role": "user", "content": f"基于以下文档回答问题：\n\n{context}\n\n问题：{question}"})
         return messages
 
-    def _call(self, messages: list[dict], max_tokens: int, stream: bool = False, name: str = "generate-response"):
+    def _call(
+        self,
+        messages: list[dict],
+        max_tokens: int,
+        stream: bool = False,
+        name: str = "generate-response",
+        timeout: float | None = None,
+    ):
         """单次调用 LLM 网关（统一温度口径；name 供 Langfuse generation 观测定位）。
 
         温度取自 ``LLM_TEMPERATURE``（默认 0.3 = 历史口径；评估/A-B 用 0，
         否则采样噪声会盖过待测改动的量级）；模型可取 ``LLM_GENERATE_MODEL``
-        覆盖（分层路由：生成走非推理模型；空 = 沿用 LLM_MODEL，旧行为）。
+        覆盖（分层路由：生成走非推理模型；空 = 沿用 LLM_MODEL，旧行为）；
+        ``timeout`` 非空时覆盖全局超时（判断类调用传短超时快速失败）。
         """
         return self.llm.generate(
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=settings.llm_temperature,
-            stream=stream,
-            name=name,
-            model=settings.llm_generate_model or None,
+            LLMRequest(
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=settings.llm_temperature,
+                stream=stream,
+                name=name,
+                model=settings.llm_generate_model or None,
+                timeout=timeout,
+            )
         )
 
-    def _call_with_budget_guard(self, messages: list[dict], name: str = "generate-response") -> str:
+    def _call_with_budget_guard(
+        self, messages: list[dict], name: str = "generate-response", timeout: float | None = None
+    ) -> str:
         """调用生成并做预算兜底：推理模型把预算耗在 reasoning 上时正文会为空。
 
         判定 = 正文为空 且 ``finish_reason == 'length'``（截断），此时用
@@ -62,14 +75,14 @@ class Generator:
         由调用方记录 warning —— 绝不把 reasoning_content 当正文、也不静默编造。
         """
         budget = settings.llm_generate_max_tokens
-        response = self._call(messages, budget, name=name)
+        response = self._call(messages, budget, name=name, timeout=timeout)
         answer, finish_reason = _extract_answer(response)
         if not answer and finish_reason == "length" and settings.llm_retry_max_tokens > budget:
             logger.warning(
                 f"生成被截断且正文为空（max_tokens={budget}, finish=length）"
                 f"——疑似 reasoning 吃满预算，用 max_tokens={settings.llm_retry_max_tokens} 重试一次"
             )
-            response = self._call(messages, settings.llm_retry_max_tokens, name=f"{name}-budget-retry")
+            response = self._call(messages, settings.llm_retry_max_tokens, name=f"{name}-budget-retry", timeout=timeout)
             answer, finish_reason = _extract_answer(response)
         if not answer:
             logger.warning(
@@ -85,19 +98,22 @@ class Generator:
         conversation_history: list[dict] | None = None,
         *,
         max_tokens: int | None = None,
+        timeout: float | None = None,
     ) -> tuple[str, str]:
         """生成答案；返回 (answer, confidence)。
 
         显式传入 ``max_tokens`` 时沿用旧口径（单次调用、不做放大重试），供测试
         与特殊调用方使用；不传则走 ``LLM_GENERATE_MAX_TOKENS`` + 预算兜底。
+        ``timeout`` 非空时透传网关覆盖全局超时（agent 循环内判断类调用传
+        ``LLM_JUDGE_TIMEOUT_SECONDS``，宁可快速失败走回退也不要卡住循环）。
         """
         messages = self._build_messages(question, docs, conversation_history)
         try:
             if max_tokens is not None:
-                response = self._call(messages, max_tokens)
+                response = self._call(messages, max_tokens, timeout=timeout)
                 answer, _ = _extract_answer(response)
             else:
-                answer = self._call_with_budget_guard(messages)
+                answer = self._call_with_budget_guard(messages, timeout=timeout)
             confidence = compute_confidence(answer, docs)
             logger.info(f"答案生成: confidence={confidence} docs={len(docs)} len={len(answer)}")
             return answer, confidence

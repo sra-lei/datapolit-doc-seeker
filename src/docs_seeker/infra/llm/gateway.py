@@ -15,7 +15,7 @@ from langfuse.openai import OpenAI
 from loguru import logger
 
 from docs_seeker.core.config import settings
-from docs_seeker.domain.interfaces.llm import LLMProvider
+from docs_seeker.domain.interfaces.llm import LLMProvider, LLMRequest
 
 load_dotenv()
 
@@ -80,34 +80,24 @@ class LLMGateway(LLMProvider):
         self.success_calls = 0
         self.fallback_calls = 0
 
-    def generate(
-        self,
-        messages: list,
-        max_tokens: int = 600,
-        temperature: float = 0.3,
-        stream: bool = False,
-        name: str = "llm-call",
-        model: str | None = None,
-    ):
-        """调用 LLM；``model`` 非空时覆盖主模型（分层模型路由，见 LLM_GENERATE_MODEL）。
+    def generate(self, request: LLMRequest):
+        """调用 LLM；``request.model`` 非空时覆盖主模型（分层模型路由，见 LLM_GENERATE_MODEL）。
 
         覆盖只影响本次调用：生成层走非推理模型降延迟/成本，而「判断/改写」仍用
         `LLM_MODEL` 指定的推理模型。熔断降级时同样沿用本次覆盖的模型名。
+        ``request.timeout`` 非空时覆盖全局超时（判断类调用传 LLM_JUDGE_TIMEOUT_SECONDS
+        快速失败走回退，避免 120s × 重试卡住调用方循环）。
         """
         self.total_calls += 1
         if self.circuit_breaker.state == CircuitState.OPEN:
             if self.fallback_client:
-                return self._try_fallback(messages, max_tokens, temperature, stream, name, model)
+                return self._try_fallback(request)
             raise AllModelsFailedError("熔断器已打开，且无备用模型")
         try:
             result = self._call_with_retry(
                 self.primary_client,
-                model or self.primary_model,
-                messages,
-                max_tokens,
-                temperature,
-                stream,
-                name,
+                request.model or self.primary_model,
+                request,
             )
             self.success_calls += 1
             self.circuit_breaker.failure_count = 0
@@ -116,7 +106,7 @@ class LLMGateway(LLMProvider):
             logger.error(f"主模型调用失败: {e}")
             if self.fallback_client:
                 try:
-                    result = self._try_fallback(messages, max_tokens, temperature, stream, name, model)
+                    result = self._try_fallback(request)
                     self.fallback_calls += 1
                     return result
                 except Exception as fb_e:
@@ -124,33 +114,34 @@ class LLMGateway(LLMProvider):
                     raise AllModelsFailedError("主模型和备用模型均失败") from fb_e
             raise AllModelsFailedError(f"主模型失败且无备用: {e}") from e
 
-    def _try_fallback(self, messages, max_tokens, temperature, stream, name="llm-call", model=None):
+    def _try_fallback(self, request: LLMRequest):
         return self._call_with_retry(
             self.fallback_client,
-            model or self.fallback_model,
-            messages,
-            max_tokens,
-            temperature,
-            stream,
-            name,
+            request.model or self.fallback_model,
+            request,
         )
 
     def _call_with_retry(
-        self, client, model, messages, max_tokens, temperature, stream, name="llm-call", max_retries=3
+        self,
+        client,
+        model,
+        request: LLMRequest,
+        max_retries=3,
     ):
         last_error = None
         call_kwargs: dict = {
             "model": model,
-            "messages": messages,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "stream": stream,
-            # 推理模型响应时间波动大（实测 10~60s），超时配置化，默认 120s
-            "timeout": settings.llm_timeout_seconds,
+            "messages": request.messages,
+            "max_tokens": request.max_tokens,
+            "temperature": request.temperature,
+            "stream": request.stream,
+            # 推理模型响应时间波动大（实测 10~60s），超时配置化，默认 120s；
+            # 判断类调用可传短超时覆盖（LLM_JUDGE_TIMEOUT_SECONDS）
+            "timeout": request.timeout if request.timeout is not None else settings.llm_timeout_seconds,
             # Langfuse：为本次生成指定稳定名称（generation 观测名）
-            "name": name,
+            "name": request.name,
         }
-        if stream:
+        if request.stream:
             # 流式场景开启 usage 上报，Langfuse 才能记录 token 用量与成本；
             # OpenAI 会在最后一个 chunk（choices 为空）返回 usage，_extract_delta 已兼容空 choices。
             call_kwargs["stream_options"] = {"include_usage": True}

@@ -6,7 +6,7 @@ docs-seeker - 查询分解
 from loguru import logger
 
 from docs_seeker.core.config import prompts, settings
-from docs_seeker.domain.interfaces.llm import LLMProvider
+from docs_seeker.domain.interfaces.llm import LLMProvider, LLMRequest
 from docs_seeker.domain.models.query import Query
 from docs_seeker.infra.llm.gateway import get_llm_gateway
 
@@ -26,10 +26,12 @@ class QueryDecomposer:
 
     def _call(self, prompt: str, max_tokens: int, name: str):
         return self.llm.generate(
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=max_tokens,
-            temperature=settings.llm_decompose_temperature,
-            name=name,
+            LLMRequest(
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_tokens,
+                temperature=settings.llm_decompose_temperature,
+                name=name,
+            )
         )
 
     def _split_lines(self, response) -> list[str]:
