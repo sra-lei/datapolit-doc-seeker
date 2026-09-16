@@ -16,7 +16,7 @@ from unittest.mock import patch
 from docs_seeker.core.config import Settings, settings
 from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.domain.services.generator import Generator
-from docs_seeker.infrastructure import llm as llm_pkg
+from docs_seeker.infra import llm as llm_pkg
 
 gateway_module = llm_pkg.gateway
 

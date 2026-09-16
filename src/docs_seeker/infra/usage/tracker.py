@@ -15,7 +15,7 @@ from typing import Any, cast
 
 from loguru import logger
 
-from docs_seeker.infrastructure.cache.redis_client import get_redis_client
+from docs_seeker.infra.cache.redis_client import get_redis_client
 
 _PREFIX = "rag:usage"
 
@@ -95,7 +95,7 @@ class UsageTracker:
                 redis.zrevrange(self._key("top"), 0, max(limit - 1, 0), withscores=True),
             )
             # 函数内导入：避免中间件链路加载缓存模块（embedder/OpenAI）
-            from docs_seeker.infrastructure.cache.semantic_cache import get_semantic_cache
+            from docs_seeker.infra.cache.semantic_cache import get_semantic_cache
 
             cache = get_semantic_cache()
 

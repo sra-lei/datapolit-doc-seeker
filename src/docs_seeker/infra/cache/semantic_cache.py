@@ -12,8 +12,8 @@ from loguru import logger
 
 from docs_seeker.core.config import settings
 from docs_seeker.core.metrics import cache_hits_total, cache_misses_total
-from docs_seeker.infrastructure.cache.redis_client import get_redis_client
-from docs_seeker.infrastructure.embedding.embedder import get_embedder
+from docs_seeker.infra.cache.redis_client import get_redis_client
+from docs_seeker.infra.embedding.embedder import get_embedder
 
 _INDEX_NAME = "qa_cache_idx"
 

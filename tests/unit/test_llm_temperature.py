@@ -18,7 +18,7 @@ from unittest.mock import patch
 from docs_seeker.core.config import Settings, settings
 from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.domain.services.generator import Generator
-from docs_seeker.infrastructure.retrieval.query_decomposer import QueryDecomposer
+from docs_seeker.infra.retrieval.query_decomposer import QueryDecomposer
 
 
 class RecordingLLM:

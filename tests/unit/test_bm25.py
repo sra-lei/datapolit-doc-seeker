@@ -8,7 +8,7 @@ autouse fixture 保证。
 from unittest.mock import patch
 
 from docs_seeker.core.config import settings
-from docs_seeker.infrastructure.retrieval.bm25_retriever import BM25Retriever
+from docs_seeker.infra.retrieval.bm25_retriever import BM25Retriever
 
 DOCS_A = [
     {"id": "doc_a", "text": "文档检索系统介绍 第一 章 目录", "source": "a", "chapter": "第一章"},
@@ -34,7 +34,7 @@ class FakeMilvus:
 
 def _retriever(fake: FakeMilvus) -> BM25Retriever:
     with (
-        patch("docs_seeker.infrastructure.retrieval.bm25_retriever.get_milvus_store", return_value=fake),
+        patch("docs_seeker.infra.retrieval.bm25_retriever.get_milvus_store", return_value=fake),
         patch.object(settings, "bm25_refresh_seconds", 0),
         patch.object(settings, "bm25_max_docs", 100),
     ):
@@ -103,7 +103,7 @@ def test_refresh_rebuilds_on_count_change():
     BM25Retriever._shared_last_checked_at = 0.0
     with (
         patch.object(settings, "bm25_refresh_seconds", 1),
-        patch("docs_seeker.infrastructure.retrieval.bm25_retriever.time.monotonic", return_value=9999.0),
+        patch("docs_seeker.infra.retrieval.bm25_retriever.time.monotonic", return_value=9999.0),
     ):
         r.search("新入库", top_k=5)
     assert BM25Retriever._shared_doc_count == len(DOCS_B)

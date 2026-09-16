@@ -7,7 +7,7 @@ from docs_seeker.api.schemas import (
     MilvusIndexInfo,
     MilvusStatsResponse,
 )
-from docs_seeker.infrastructure.database.milvus_client import get_milvus_store
+from docs_seeker.infra.database.milvus_client import get_milvus_store
 
 router = APIRouter(tags=["milvus"])
 

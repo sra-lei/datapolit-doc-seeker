@@ -26,8 +26,8 @@ from loguru import logger
 from docs_seeker.core.config import settings
 from docs_seeker.domain.interfaces.retriever import Retriever
 from docs_seeker.domain.models.chunk import Chunk
-from docs_seeker.infrastructure.database.milvus_client import get_milvus_store
-from docs_seeker.infrastructure.retrieval.metadata_filter import matches_metadata
+from docs_seeker.infra.database.milvus_client import get_milvus_store
+from docs_seeker.infra.retrieval.metadata_filter import matches_metadata
 
 
 class BM25Retriever(Retriever):

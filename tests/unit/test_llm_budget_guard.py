@@ -22,7 +22,7 @@ from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.domain.models.query import Query
 from docs_seeker.domain.services.chat_service import ChatService
 from docs_seeker.domain.services.generator import Generator, compute_confidence
-from docs_seeker.infrastructure.retrieval.query_decomposer import QueryDecomposer
+from docs_seeker.infra.retrieval.query_decomposer import QueryDecomposer
 
 _EMPTY_TRUNCATED = ("", "length")  # 推理吃满预算：正文空 + 截断
 _EMPTY_STOPPED = ("", "stop")  # 真的没内容（非截断）

@@ -7,7 +7,7 @@ BM25 的 chunk 全是空 id → 上游按 `chunk.id or ""` 去重时整条 BM25 
 
 from unittest.mock import patch
 
-from docs_seeker.infrastructure.database.milvus_client import MilvusStore
+from docs_seeker.infra.database.milvus_client import MilvusStore
 
 
 class _FakeClient:
@@ -22,7 +22,7 @@ class _FakeClient:
 
 
 def _store(fake: _FakeClient) -> MilvusStore:
-    with patch("docs_seeker.infrastructure.database.milvus_client.MilvusClient", return_value=fake):
+    with patch("docs_seeker.infra.database.milvus_client.MilvusClient", return_value=fake):
         return MilvusStore()
 
 

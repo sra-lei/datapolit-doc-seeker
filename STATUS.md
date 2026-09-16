@@ -43,7 +43,7 @@
 - 未纳入本次范围（按清单后续修）：P1-1/P1-2 依赖缺失、P1-3 语义缓存 bytes、P1-4 缓存维度、P2 系列等
 - 新发现问题：BM25 结果无 id → /chat 去重坍缩，见 P2-12
 - 依赖单一来源（P3-3）：删除 `requirements.txt`；Dockerfile 迁移到 uv（`python:3.12-slim` 基础镜像 + 构建期 `pip install uv` 引导工具，依赖安装用 `uv sync --frozen --no-dev`）；注：ghcr.io 官方 uv 镜像国内网络拉取失败，故弃用；未实机 docker build 验证
-- 二次结构重构（目标架构对齐，行为零变化）：`app.py` → `api/main.py`（uvicorn 入口 `docs_seeker.api.main:app`）；`config/` + `infra/{observability,security}` → `core/`（config.py/logging.py/metrics.py/security.py，yaml 并入 core/）；`domain/entities/` → `domain/models/`；`application/services` + `application/pipelines` → `domain/services/`（含 rag_pipeline）；`retrieval/` → `infrastructure/retrieval/`；`infra/` → `infrastructure/`（`vector_store/` → `database/`）；`api/routes/v1/` 拍平为 `api/routes/`（`/v1` 前缀保留在聚合处）；所有 import 同步更新；工程化：ruff/mypy 配置 + dev extras（ruff/mypy 入 uv.lock）、路由 async→def（线程池）、新增 guard/composite/bm25/usage 单元测试（总计 27 例）；测试重组为 `tests/unit/` + `tests/integration/` + `conftest.py`
+- 二次结构重构（目标架构对齐，行为零变化）：`app.py` → `api/main.py`（uvicorn 入口 `docs_seeker.api.main:app`）；`config/` + `infra/{observability,security}` → `core/`（config.py/logging.py/metrics.py/security.py，yaml 并入 core/）；`domain/entities/` → `domain/models/`；`application/services` + `application/pipelines` → `domain/services/`（含 rag_pipeline）；`retrieval/` → `infra/retrieval/`；`infra/` → `infra/`（`vector_store/` → `database/`）；`api/routes/v1/` 拍平为 `api/routes/`（`/v1` 前缀保留在聚合处）；所有 import 同步更新；工程化：ruff/mypy 配置 + dev extras（ruff/mypy 入 uv.lock）、路由 async→def（线程池）、新增 guard/composite/bm25/usage 单元测试（总计 27 例）；测试重组为 `tests/unit/` + `tests/integration/` + `conftest.py`
 
 ### 2.1 实际目录结构（与 README 一致，重构后）
 
@@ -68,7 +68,7 @@ src/docs_seeker/
 │   ├── models/                   # Chunk / Document / Query
 │   ├── services/                 # chat_service / generator / rag_pipeline / top_warmup
 │   └── interfaces/               # Retriever / EmbeddingProvider / LLMProvider
-└── infrastructure/               # 基础设施层（外部依赖实现）
+└── infra/               # 基础设施层（外部依赖实现）
     ├── database/                 # milvus_client.py（只读）
     ├── cache/                    # redis_client.py + semantic_cache.py
     ├── llm/                      # gateway.py（重试/熔断/降级）
@@ -102,8 +102,8 @@ src/docs_seeker/
 
 遵循 [langfuse/skills](https://github.com/langfuse/skills) 官方 Agent Skill 与[追踪最佳实践](https://langfuse.com/docs/observability/best-practices)实现：
 
-- **接入点**：`infrastructure/tracing.py`（环境变量加载 + `tracing_enabled()` / `shutdown_langfuse()`）
-- **LLM 调用**：`infrastructure/llm/gateway.py`、`infrastructure/embedding/embedder.py` 改用 `langfuse.openai.OpenAI` drop-in 包装，自动记录 generation/embedding 观测（模型名、token 用量、耗时、错误）；流式开启 `stream_options.include_usage` 采集 token
+- **接入点**：`infra/tracing.py`（环境变量加载 + `tracing_enabled()` / `shutdown_langfuse()`）
+- **LLM 调用**：`infra/llm/gateway.py`、`infra/embedding/embedder.py` 改用 `langfuse.openai.OpenAI` drop-in 包装，自动记录 generation/embedding 观测（模型名、token 用量、耗时、错误）；流式开启 `stream_options.include_usage` 采集 token
 - **流程观测**：`ChatService.chat/chat_stream`（根 trace `chat-response`）、`RAGPipeline.prepare`（`retrieve-context`）、三路检索器与 RRF 融合（`retriever` 类型）、语义缓存查询（`retriever` 类型）
 - **属性**：`session_id`/`user_id`（ChatRequest 新增可选字段）→ propagate_attributes 传播；tags=`chat`；environment 取 `ENVIRONMENT`；metadata 含路由
 - **降级**：未配置 `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` 时客户端自动 no-op，不影响业务；测试环境 `LANGFUSE_TRACING_ENABLED=false`（tests/conftest.py）
@@ -113,47 +113,47 @@ src/docs_seeker/
 
 ## 3. 遗留问题清单
 
-> 路径对应说明：重构后旧路径已迁移 —— `domain/*_retriever.py` → `infrastructure/retrieval/`；`infra/milvus_store.py` → `infrastructure/database/milvus_client.py`；`infra/semantic_cache.py` → `infrastructure/cache/semantic_cache.py`；`infra/llm_gateway.py` → `infrastructure/llm/gateway.py`；`infra/embedder.py` → `infrastructure/embedding/embedder.py`；`infra/guard.py` → `core/security.py`；`infra/usage_tracker.py` → `infrastructure/usage/tracker.py`；`api/routes.py` → `api/routes/*.py`（v1 拍平，前缀保留）；`api/schemas.py` → `api/schemas/{request,response}.py`；`config/config.py` → `core/config.py`；`domain/generator.py` → `domain/services/generator.py`；`application/*` → `domain/services/`
+> 路径对应说明：重构后旧路径已迁移 —— `domain/*_retriever.py` → `infra/retrieval/`；`infra/milvus_store.py` → `infra/database/milvus_client.py`；`infra/semantic_cache.py` → `infra/cache/semantic_cache.py`；`infra/llm_gateway.py` → `infra/llm/gateway.py`；`infra/embedder.py` → `infra/embedding/embedder.py`；`infra/guard.py` → `core/security.py`；`infra/usage_tracker.py` → `infra/usage/tracker.py`；`api/routes.py` → `api/routes/*.py`（v1 拍平，前缀保留）；`api/schemas.py` → `api/schemas/{request,response}.py`；`config/config.py` → `core/config.py`；`domain/generator.py` → `domain/services/generator.py`；`application/*` → `domain/services/`
 
 ### 3.1 🔴 P1 阻断级（装不上 / 启动失败 / 核心功能失效）
 
-| # | 问题 | 位置 | 影响 |
-|---|---|---|---|
-| P1-1 | ~~缺失 `pydantic-settings` 依赖~~ | `pyproject.toml`、`requirements.txt` | ✅ 已解决（uv 安装 `pydantic-settings==2.15.0`，`import docs_seeker.app` 通过） |
-| P1-2 | ~~`python-dotenv` 未显式声明~~ | `pyproject.toml`、`requirements.txt` | ✅ 已解决：显式声明 `python-dotenv>=1.0.0`（实际安装 1.2.3） |
-| P1-3 | ~~语义缓存三重故障~~ | `infra/cache/semantic_cache.py` | ✅ 已解决：① `array('f', vec).tobytes()` 字节编码；② `doc["sources"]` 改用 `[]` 访问；③ KNN 加 `dialect=2`；另新增 `SEMANTIC_CACHE_ENABLED` 开关（默认开）；`tests/test_semantic_cache.py` 5 例通过 |
-| P1-4 | ~~缓存索引维度硬编码 `DIM: 1536`~~ | `infra/cache/semantic_cache.py` | ✅ 已解决：维度改为按真实 embedding 长度动态创建，模型/维度变化时自动重建索引（漂移自愈） |
-| P1-5 | ~~README（未提交版）与代码脱节~~ | `README.md` | ✅ 已解决：按 README 架构完成重构（见 2.0），目录树与实际一致，游离 ``` 已删；"提交 git" 待做 |
+| #    | 问题                               | 位置                                 | 影响                                                                                                                                                                                                |
+| ---- | ---------------------------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1-1 | ~~缺失 `pydantic-settings` 依赖~~  | `pyproject.toml`、`requirements.txt` | ✅ 已解决（uv 安装 `pydantic-settings==2.15.0`，`import docs_seeker.app` 通过）                                                                                                                     |
+| P1-2 | ~~`python-dotenv` 未显式声明~~     | `pyproject.toml`、`requirements.txt` | ✅ 已解决：显式声明 `python-dotenv>=1.0.0`（实际安装 1.2.3）                                                                                                                                        |
+| P1-3 | ~~语义缓存三重故障~~               | `infra/cache/semantic_cache.py`      | ✅ 已解决：① `array('f', vec).tobytes()` 字节编码；② `doc["sources"]` 改用 `[]` 访问；③ KNN 加 `dialect=2`；另新增 `SEMANTIC_CACHE_ENABLED` 开关（默认开）；`tests/test_semantic_cache.py` 5 例通过 |
+| P1-4 | ~~缓存索引维度硬编码 `DIM: 1536`~~ | `infra/cache/semantic_cache.py`      | ✅ 已解决：维度改为按真实 embedding 长度动态创建，模型/维度变化时自动重建索引（漂移自愈）                                                                                                           |
+| P1-5 | ~~README（未提交版）与代码脱节~~   | `README.md`                          | ✅ 已解决：按 README 架构完成重构（见 2.0），目录树与实际一致，游离 ``` 已删；"提交 git" 待做                                                                                                       |
 
 ### 3.2 🟠 P2 功能缺陷 / 潜在 bug
 
-| # | 问题 | 位置 | 影响 |
-|---|---|---|---|
-| P2-1 | async 路由内跑同步阻塞代码（Milvus/Redis/LLM/jieba/BM25 建索引） | `api/routes.py:13,29,35` 及各 domain 实现 | 阻塞事件循环，并发吞吐劣化；三路检索串行无 `asyncio.gather` |
-| P2-2 | BM25 索引首次 search 才 `build_index()`，之后永不过期 | `domain/bm25_retriever.py:56-57` | 文档更新后检索结果陈旧（README 的"惰性刷新"方案未实现） |
-| P2-3 | `HybridRouter` 死代码：deps 提供注入器但无路由使用 | `domain/hybrid_router.py`、`api/deps.py:37-40` | BM25 路由决策从未生效，composite 无条件三路全跑 |
-| P2-4 | `MilvusStore.query_by_chapter` 死代码且必崩（传 `query_vector=[]`） | `infra/milvus_store.py:86-107` | 调用即报错；无调用方（summary_retriever 实际用内存后过滤） |
-| P2-5 | score 语义不统一：dense 用 `1-distance`(≈0~1)，BM25 无界原始分 | `dense_retriever.py:40` vs `bm25_retriever.py:84`；`generator.py:25` | `_score_avg > 0.3` 的置信度判定被 BM25 高分污染，结果失真 |
-| P2-6 | 健康检查 `status` 恒为 `"ok"`，即使 Milvus/Redis 全挂 | `api/routes.py:13-25` | 监控误判；`redis_connected` 依赖缓存模块私有属性 `_available` |
-| P2-7 | guard 正则一刀切：`(翻译|translate)` 拒绝所有翻译请求；`(怎么|如何).*(攻击|破解|入侵)` 可能误杀正常问题 | `infra/guard.py:25-31` | 正常用户请求被拒（策略问题，需人工确认口径） |
-| P2-8 | CORS `allow_origins=["*"]` + `allow_credentials=True` 非法组合 | `app.py:23` | 浏览器规范不允许，跨域带凭据请求行为异常 |
-| P2-9 | ~~pydantic v2 弃用写法 `class Config`~~ | `config/settings.py` | ✅ 已解决：改用 `model_config = SettingsConfigDict(...)` |
-| P2-10 | `MilvusStore.search` 异常时静默返回 `[]` | `infra/milvus_store.py:82-84` | 上层无法区分"无结果"与"失败"，chat 拿空上下文仍生成 → 幻觉风险 |
-| P2-11 | 每次 chat 都调 LLM 做查询分解，无缓存/无简单问题短路 | `retrieval/query_decomposer.py`、`application/services/chat_service.py` | 每次问答额外 1 次 LLM 调用 + 延迟 + 成本 |
-| P2-12 | BM25 检索结果无 id（`get_all_documents` 未取 id 字段）→ /chat 按 id 去重时全部以 "" 归并，BM25 命中几乎全部被去重掉 | `retrieval/bm25_retriever.py` + `application/pipelines/rag_pipeline.py` | 问答链路召回受损；重构时保持原行为，修复方向：`get_all_documents` 补 id 或用内容哈希兜底 |
-| P2-13 | ~~向量维度不匹配（库 1536 vs embedding 1024）~~ | `config/settings.py`、`.env.example` | ✅ 已解决：根因 doc-kit 用 `text-embedding-v2`（1536 维）入库，docs-seeker 误配 `text-embedding-v4`（1024 维）导致 dense/summary 检索报 `vector dimension mismatch (6144 vs 4096 bytes)`；已将 embedding 模型统一为 `text-embedding-v2`，实测 `/v1/retrieve` 恢复。⚠️ 服务器部署 .env 需同步改 `EMBEDDING_MODEL=text-embedding-v2`；doc-kit 入库侧模型必须同为 v2（本地 doc-kit/.env 现为 v4，重新入库前需改）；长远可统一 v4 + 重建库 |
+| #     | 问题                                                                                                                | 位置                                                                    | 影响                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ----------------------- | ---------------------- | -------------------------------------------- |
+| P2-1  | async 路由内跑同步阻塞代码（Milvus/Redis/LLM/jieba/BM25 建索引）                                                    | `api/routes.py:13,29,35` 及各 domain 实现                               | 阻塞事件循环，并发吞吐劣化；三路检索串行无 `asyncio.gather`                                                                                                                                                                                                                                                                                                                                                                            |
+| P2-2  | BM25 索引首次 search 才 `build_index()`，之后永不过期                                                               | `domain/bm25_retriever.py:56-57`                                        | 文档更新后检索结果陈旧（README 的"惰性刷新"方案未实现）                                                                                                                                                                                                                                                                                                                                                                                |
+| P2-3  | `HybridRouter` 死代码：deps 提供注入器但无路由使用                                                                  | `domain/hybrid_router.py`、`api/deps.py:37-40`                          | BM25 路由决策从未生效，composite 无条件三路全跑                                                                                                                                                                                                                                                                                                                                                                                        |
+| P2-4  | `MilvusStore.query_by_chapter` 死代码且必崩（传 `query_vector=[]`）                                                 | `infra/milvus_store.py:86-107`                                          | 调用即报错；无调用方（summary_retriever 实际用内存后过滤）                                                                                                                                                                                                                                                                                                                                                                             |
+| P2-5  | score 语义不统一：dense 用 `1-distance`(≈0~1)，BM25 无界原始分                                                      | `dense_retriever.py:40` vs `bm25_retriever.py:84`；`generator.py:25`    | `_score_avg > 0.3` 的置信度判定被 BM25 高分污染，结果失真                                                                                                                                                                                                                                                                                                                                                                              |
+| P2-6  | 健康检查 `status` 恒为 `"ok"`，即使 Milvus/Redis 全挂                                                               | `api/routes.py:13-25`                                                   | 监控误判；`redis_connected` 依赖缓存模块私有属性 `_available`                                                                                                                                                                                                                                                                                                                                                                          |
+| P2-7  | guard 正则一刀切：`(翻译                                                                                            | translate)` 拒绝所有翻译请求；`(怎么                                    | 如何).\*(攻击                                                                                                                                                                                                                                                                                                                                                                                                                          | 破解 | 入侵)` 可能误杀正常问题 | `infra/guard.py:25-31` | 正常用户请求被拒（策略问题，需人工确认口径） |
+| P2-8  | CORS `allow_origins=["*"]` + `allow_credentials=True` 非法组合                                                      | `app.py:23`                                                             | 浏览器规范不允许，跨域带凭据请求行为异常                                                                                                                                                                                                                                                                                                                                                                                               |
+| P2-9  | ~~pydantic v2 弃用写法 `class Config`~~                                                                             | `config/settings.py`                                                    | ✅ 已解决：改用 `model_config = SettingsConfigDict(...)`                                                                                                                                                                                                                                                                                                                                                                               |
+| P2-10 | `MilvusStore.search` 异常时静默返回 `[]`                                                                            | `infra/milvus_store.py:82-84`                                           | 上层无法区分"无结果"与"失败"，chat 拿空上下文仍生成 → 幻觉风险                                                                                                                                                                                                                                                                                                                                                                         |
+| P2-11 | 每次 chat 都调 LLM 做查询分解，无缓存/无简单问题短路                                                                | `retrieval/query_decomposer.py`、`application/services/chat_service.py` | 每次问答额外 1 次 LLM 调用 + 延迟 + 成本                                                                                                                                                                                                                                                                                                                                                                                               |
+| P2-12 | BM25 检索结果无 id（`get_all_documents` 未取 id 字段）→ /chat 按 id 去重时全部以 "" 归并，BM25 命中几乎全部被去重掉 | `retrieval/bm25_retriever.py` + `application/pipelines/rag_pipeline.py` | 问答链路召回受损；重构时保持原行为，修复方向：`get_all_documents` 补 id 或用内容哈希兜底                                                                                                                                                                                                                                                                                                                                               |
+| P2-13 | ~~向量维度不匹配（库 1536 vs embedding 1024）~~                                                                     | `config/settings.py`、`.env.example`                                    | ✅ 已解决：根因 doc-kit 用 `text-embedding-v2`（1536 维）入库，docs-seeker 误配 `text-embedding-v4`（1024 维）导致 dense/summary 检索报 `vector dimension mismatch (6144 vs 4096 bytes)`；已将 embedding 模型统一为 `text-embedding-v2`，实测 `/v1/retrieve` 恢复。⚠️ 服务器部署 .env 需同步改 `EMBEDDING_MODEL=text-embedding-v2`；doc-kit 入库侧模型必须同为 v2（本地 doc-kit/.env 现为 v4，重新入库前需改）；长远可统一 v4 + 重建库 |
 
 ### 3.3 🟡 P3 工程化欠账
 
-| # | 问题 | 位置 | 影响 |
-|---|---|---|---|
-| P3-1 | 零测试：tests/ 为空，核心纯逻辑（RRF/BM25/guard/脱敏）无保障 | `tests/` | 修复无回归防线 |
-| P3-2 | ~~langfuse 声明未使用~~ | `pyproject.toml`、`.env.example` | ✅ 已解决：chat 全链路 Langfuse 追踪已接入（见 2.5），未配置时自动 no-op |
-| P3-3 | ~~依赖清单双份维护（pyproject + requirements.txt 内容重复）~~ | `Dockerfile`、`requirements.txt` | ✅ 已解决：删除 `requirements.txt`，Dockerfile 迁移到 uv（`python:3.12-slim` + 构建期 `pip install uv`，依赖安装 `uv sync --frozen`），pyproject.toml + uv.lock 单一正源 |
-| P3-4 | 无认证/限流中间件 | api 层 | 请求日志中间件（request_id + 耗时 + 指标）已落地；认证/限流仍未实现 |
-| P3-5 | 其他死代码：`Embedder.get_embeddings_batch/reset`、`SemanticCache.clear/stats`、`MilvusStore.count` 均无调用方 | 对应文件 | 清理或接线（如暴露 metrics 端点） |
-| P3-6 | BM25 `_tokenize` 过滤长度>1，中文单字 token 被丢弃 | `domain/bm25_retriever.py:26` | 单字查询召回差 |
-| P3-7 | ~~Docker：非 root 用户、无 healthcheck~~ | `Dockerfile`、`docker-compose.yml`、`.dockerignore` | ✅ 已解决：非 root（app 用户 uid 1000）+ Dockerfile/compose 双份 healthcheck（urllib 调 /v1/health）+ 新增 `.dockerignore`（排除 .venv/.uv-cache/.env 等进镜像） |
+| #    | 问题                                                                                                           | 位置                                                | 影响                                                                                                                                                                     |
+| ---- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| P3-1 | 零测试：tests/ 为空，核心纯逻辑（RRF/BM25/guard/脱敏）无保障                                                   | `tests/`                                            | 修复无回归防线                                                                                                                                                           |
+| P3-2 | ~~langfuse 声明未使用~~                                                                                        | `pyproject.toml`、`.env.example`                    | ✅ 已解决：chat 全链路 Langfuse 追踪已接入（见 2.5），未配置时自动 no-op                                                                                                 |
+| P3-3 | ~~依赖清单双份维护（pyproject + requirements.txt 内容重复）~~                                                  | `Dockerfile`、`requirements.txt`                    | ✅ 已解决：删除 `requirements.txt`，Dockerfile 迁移到 uv（`python:3.12-slim` + 构建期 `pip install uv`，依赖安装 `uv sync --frozen`），pyproject.toml + uv.lock 单一正源 |
+| P3-4 | 无认证/限流中间件                                                                                              | api 层                                              | 请求日志中间件（request_id + 耗时 + 指标）已落地；认证/限流仍未实现                                                                                                      |
+| P3-5 | 其他死代码：`Embedder.get_embeddings_batch/reset`、`SemanticCache.clear/stats`、`MilvusStore.count` 均无调用方 | 对应文件                                            | 清理或接线（如暴露 metrics 端点）                                                                                                                                        |
+| P3-6 | BM25 `_tokenize` 过滤长度>1，中文单字 token 被丢弃                                                             | `domain/bm25_retriever.py:26`                       | 单字查询召回差                                                                                                                                                           |
+| P3-7 | ~~Docker：非 root 用户、无 healthcheck~~                                                                       | `Dockerfile`、`docker-compose.yml`、`.dockerignore` | ✅ 已解决：非 root（app 用户 uid 1000）+ Dockerfile/compose 双份 healthcheck（urllib 调 /v1/health）+ 新增 `.dockerignore`（排除 .venv/.uv-cache/.env 等进镜像）         |
 
 ---
 
@@ -193,7 +193,7 @@ src/docs_seeker/
 ### Phase 2 — 工程化（P3）
 
 - [ ] **P3-1** 补最小测试集：`test_guard.py`（注入/脱敏/误杀回归）、`test_bm25.py`（建索引/检索/刷新）、`test_composite.py`（RRF 融合/去重/权重）、`test_semantic_cache.py`（mock Redis + 修复后的向量编码）；pytest 跑绿
-- [x] **P3-2** langfuse 真正接入：chat 全链路 Langfuse 追踪（见 2.5：`infrastructure/tracing.py` + `@observe` 观测 + langfuse.openai 包装 LLM/向量化；未配置 LANGFUSE_* 时自动降级 no-op；测试环境经 `LANGFUSE_TRACING_ENABLED=false` 禁用上报）；已端到端验证并审计真实 trace
+- [x] **P3-2** langfuse 真正接入：chat 全链路 Langfuse 追踪（见 2.5：`infra/tracing.py` + `@observe` 观测 + langfuse.openai 包装 LLM/向量化；未配置 LANGFUSE\_\* 时自动降级 no-op；测试环境经 `LANGFUSE_TRACING_ENABLED=false` 禁用上报）；已端到端验证并审计真实 trace
 - [x] **P3-3** 依赖单一来源：已删 `requirements.txt`，Dockerfile 迁移到 uv（`uv sync --frozen`），pyproject.toml + uv.lock 为唯一正源
 - [ ] **P3-4** 补中间件（日志 request_id 已落地；剩余：限流、鉴权如 API Key）
 - [ ] **P3-5** 死代码清理或接线（见 3.3 P3-5）
@@ -223,40 +223,44 @@ src/docs_seeker/
 
 ### 6.2 已确认的决策
 
-| 决策点 | 结论 |
-|---|---|
+| 决策点   | 结论                                                                                                 |
+| -------- | ---------------------------------------------------------------------------------------------------- |
 | 归并粒度 | 问题文本**精确匹配**（归一化：strip + 压缩空白 + 小写）；匹配不到的走语义缓存兜底（已有，阈值 0.92） |
-| 存储 | **Redis**（不引入 SQLite）——与现有 usage 统计同体系（`rag:usage:top` ZSet） |
-| 隐私 | 不做脱敏（都是针对文档的提问，无个人问题） |
-| 记录范围 | chat 请求的问题文本（归一化后 ≤200 字符，过短/空跳过） |
+| 存储     | **Redis**（不引入 SQLite）——与现有 usage 统计同体系（`rag:usage:top` ZSet）                          |
+| 隐私     | 不做脱敏（都是针对文档的提问，无个人问题）                                                           |
+| 记录范围 | chat 请求的问题文本（归一化后 ≤200 字符，过短/空跳过）                                               |
 
 ### 6.3 方案设计
 
 **① 记录层（`infra/usage/` 扩展）**
+
 - `record()` 增加 `question` 参数（chat_service 传入）；归一化后 `ZINCRBY rag:usage:top 1 <问题>`
 - Redis 不可用时降级跳过（与现 usage 一致）
 
 **② Top 查询**
+
 - 新端点 `GET /v1/usage/top?limit=10`（或并入 `/v1/usage/stats` 加 `top` 字段，待定）
 - 返回 `[{question, count, cached}]`，`cached` = 语义缓存 search 命中判定（供预热器与前端标记）
 
 **③ 预热器（省 token 核心，`infra/warmup.py`）**
+
 - 后台线程 + 定时（默认每 6h）：对 Top10 中 `cached=false` 的问题，**复用 `chat_service.pipeline.run` + `cache.store`** 跑一遍写缓存
 - Redis 锁防多实例重复预热；Top 列表变化（hash 对比）才重预热
 - 预热失败不阻塞（try/except + 日志）
 - 配置：`TOP_WARMUP_ENABLED`（默认 true）、`TOP_WARMUP_INTERVAL`、`TOP_WARMUP_SIZE`（默认 10）
 
 **④ 前端（ChatWidget 欢迎语）**
+
 - ChatWidget 打开且消息为空时拉取 `/v1/usage/top` → 展示 Top 问题快捷按钮
 - 点击按钮 → 复用 `handleSend` 逻辑直接提问（该问题大概率已预热命中缓存）
 
 ### 6.4 效果与成本
 
-| 场景 | 现状（仅被动缓存） | 加预热后 |
-|---|---|---|
-| top 问题首次被问 | 全量检索 + LLM | 预热后直接命中缓存（0 LLM） |
-| top 问题重复问 | 命中缓存 | 命中缓存 |
-| 预热成本 | — | 每周期 ≤10 次 LLM 调用 |
+| 场景             | 现状（仅被动缓存） | 加预热后                    |
+| ---------------- | ------------------ | --------------------------- |
+| top 问题首次被问 | 全量检索 + LLM     | 预热后直接命中缓存（0 LLM） |
+| top 问题重复问   | 命中缓存           | 命中缓存                    |
+| 预热成本         | —                  | 每周期 ≤10 次 LLM 调用      |
 
 ### 6.5 实施清单（照单执行）
 

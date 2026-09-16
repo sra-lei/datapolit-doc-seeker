@@ -2,12 +2,12 @@
 
 from docs_seeker.domain.services.chat_service import ChatService
 from docs_seeker.domain.services.generator import Generator
-from docs_seeker.infrastructure.cache.semantic_cache import get_semantic_cache
-from docs_seeker.infrastructure.llm.gateway import get_llm_gateway
-from docs_seeker.infrastructure.retrieval.composite_retriever import CompositeRetriever
-from docs_seeker.infrastructure.retrieval.hybrid_router import HybridRouter
-from docs_seeker.infrastructure.retrieval.query_decomposer import QueryDecomposer
-from docs_seeker.infrastructure.usage import get_usage_tracker
+from docs_seeker.infra.cache.semantic_cache import get_semantic_cache
+from docs_seeker.infra.llm.gateway import get_llm_gateway
+from docs_seeker.infra.retrieval.composite_retriever import CompositeRetriever
+from docs_seeker.infra.retrieval.hybrid_router import HybridRouter
+from docs_seeker.infra.retrieval.query_decomposer import QueryDecomposer
+from docs_seeker.infra.usage import get_usage_tracker
 
 _composite_retriever: CompositeRetriever | None = None
 _generator: Generator | None = None

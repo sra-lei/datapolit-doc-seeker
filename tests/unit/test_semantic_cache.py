@@ -3,10 +3,11 @@
 覆盖：向量编码格式、禁用开关、KNN dialect=2 与字节向量参数（Query 对象传递）、
 命中路径（redis-py 8.x 的 doc.json 打包结构）、维度漂移自动重建索引。
 """
+
 from unittest.mock import patch
 
 from docs_seeker.core.config import settings
-from docs_seeker.infrastructure.cache.semantic_cache import SemanticCache
+from docs_seeker.infra.cache.semantic_cache import SemanticCache
 
 
 class FakeDoc:
@@ -40,8 +41,20 @@ class FakeIndex:
         return {
             "attributes": [
                 [
-                    "identifier", "$.embedding", "attribute", "embedding", "type", "VECTOR",
-                    "algorithm", "FLAT", "data_type", "FLOAT32", "dim", self.dim, "distance_metric", "COSINE",
+                    "identifier",
+                    "$.embedding",
+                    "attribute",
+                    "embedding",
+                    "type",
+                    "VECTOR",
+                    "algorithm",
+                    "FLAT",
+                    "data_type",
+                    "FLOAT32",
+                    "dim",
+                    self.dim,
+                    "distance_metric",
+                    "COSINE",
                 ]
             ]
         }
@@ -89,8 +102,8 @@ class FakeEmbedder:
 
 def _patch(cache_enabled=True, index=None):
     fake_redis = FakeRedis(index=index)
-    p_redis = patch("docs_seeker.infrastructure.cache.semantic_cache.get_redis_client", return_value=fake_redis)
-    p_embedder = patch("docs_seeker.infrastructure.cache.semantic_cache.get_embedder", return_value=FakeEmbedder())
+    p_redis = patch("docs_seeker.infra.cache.semantic_cache.get_redis_client", return_value=fake_redis)
+    p_embedder = patch("docs_seeker.infra.cache.semantic_cache.get_embedder", return_value=FakeEmbedder())
     p_enabled = patch.object(settings, "semantic_cache_enabled", cache_enabled)
     return fake_redis, p_redis, p_embedder, p_enabled
 
@@ -151,8 +164,20 @@ def test_read_index_dim_supports_flat_list_attributes():
     flat = [
         ["identifier", "$.question", "attribute", "question", "type", "TEXT", "WEIGHT", 1.0, "NOSTEM"],
         [
-            "identifier", "$.embedding", "attribute", "embedding", "type", "VECTOR",
-            "algorithm", "FLAT", "data_type", "FLOAT32", "dim", 1024, "distance_metric", "COSINE",
+            "identifier",
+            "$.embedding",
+            "attribute",
+            "embedding",
+            "type",
+            "VECTOR",
+            "algorithm",
+            "FLAT",
+            "data_type",
+            "FLOAT32",
+            "dim",
+            1024,
+            "distance_metric",
+            "COSINE",
         ],
     ]
 
@@ -165,7 +190,7 @@ def test_read_index_dim_supports_flat_list_attributes():
             return _InfoIndex()
 
     with (
-        patch("docs_seeker.infrastructure.cache.semantic_cache.get_redis_client", return_value=_InfoRedis()),
+        patch("docs_seeker.infra.cache.semantic_cache.get_redis_client", return_value=_InfoRedis()),
         patch.object(settings, "semantic_cache_enabled", True),  # 用例自带环境，不依赖外部 .env
     ):
         cache = SemanticCache()

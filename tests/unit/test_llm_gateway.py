@@ -3,6 +3,7 @@
 背景：网关原先硬编码 `timeout=15`（普通模型口径），推理模型的响应时间随题目
 波动（实测 10~60s），长答案会被直接打成超时失败 → 超时必须配置化且默认够大。
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -10,7 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from docs_seeker.core.config import settings
-from docs_seeker.infrastructure import llm as llm_pkg
+from docs_seeker.infra import llm as llm_pkg
 
 gateway_module = llm_pkg.gateway
 

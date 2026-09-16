@@ -41,7 +41,7 @@ src/docs_seeker/
 │       ├── retriever.py          # 检索器抽象接口
 │       ├── embedder.py           # 向量化接口
 │       └── llm.py                # LLM 接口
-└── infrastructure/               # 基础设施层（外部依赖实现）
+└── infra/               # 基础设施层（外部依赖实现）
     ├── database/                 # 数据库实现
     │   └── milvus_client.py      # Milvus 只读客户端
     ├── cache/                    # 缓存实现
@@ -68,13 +68,13 @@ src/docs_seeker/
 ### 分层架构（整洁架构）
 
 ```
-HTTP 层 (api/) 
+HTTP 层 (api/)
     ↓ 依赖
-业务服务层 (domain/services/) 
+业务服务层 (domain/services/)
     ↓ 依赖
 领域层 (domain/models + interfaces) ← 核心，定义接口
     ↑ 实现
-基础设施层 (infrastructure/) ← 实现领域接口
+基础设施层 (infra/) ← 实现领域接口
 ```
 
 - **依赖方向**：外层依赖内层，内层不依赖外层
@@ -84,18 +84,18 @@ HTTP 层 (api/)
 ### 接口隔离（依赖倒置）
 
 - `domain/interfaces/` 定义抽象接口
-- `infrastructure/` 实现这些接口（Milvus、Redis、LLM 等）
+- `infra/` 实现这些接口（Milvus、Redis、LLM 等）
 - 上层只依赖接口，不依赖具体实现
 - 便于替换组件（如 Milvus → Qdrant）
 
 ### 关注点分离
 
-| 层级 | 职责 | 示例 |
-|------|------|------|
-| **API 层** | HTTP 协议适配、参数校验、响应格式化 | FastAPI 路由 |
-| **业务服务层** | 用例编排、业务流程控制 | 检索→融合→生成 |
-| **领域层** | 核心业务逻辑、实体定义 | 检索策略接口、文档实体 |
-| **基础设施层** | 外部依赖适配 | 数据库客户端、LLM SDK |
+| 层级           | 职责                                | 示例                   |
+| -------------- | ----------------------------------- | ---------------------- |
+| **API 层**     | HTTP 协议适配、参数校验、响应格式化 | FastAPI 路由           |
+| **业务服务层** | 用例编排、业务流程控制              | 检索→融合→生成         |
+| **领域层**     | 核心业务逻辑、实体定义              | 检索策略接口、文档实体 |
+| **基础设施层** | 外部依赖适配                        | 数据库客户端、LLM SDK  |
 
 ### 配置外部化
 
@@ -111,15 +111,15 @@ HTTP 层 (api/)
 
 ## API
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/v1/chat` | 问答：检索 + LLM 生成答案 |
-| GET | `/v1/health` | 健康检查 |
-| GET | `/v1/stats` | 运行指标（语义缓存 + LLM 网关统计） |
-| GET | `/v1/milvus/stats` | Milvus 集合监控（状态/行数/向量维度/索引） |
-| GET | `/v1/usage/stats` | RAG 使用统计（总次数/成功率/活跃用户/用户 Top） |
-| GET | `/v1/usage/top` | 热门问题 TopN（含语义缓存命中标记） |
-| GET | `/metrics` | Prometheus 指标 |
+| 方法 | 路径               | 说明                                            |
+| ---- | ------------------ | ----------------------------------------------- |
+| POST | `/v1/chat`         | 问答：检索 + LLM 生成答案                       |
+| GET  | `/v1/health`       | 健康检查                                        |
+| GET  | `/v1/stats`        | 运行指标（语义缓存 + LLM 网关统计）             |
+| GET  | `/v1/milvus/stats` | Milvus 集合监控（状态/行数/向量维度/索引）      |
+| GET  | `/v1/usage/stats`  | RAG 使用统计（总次数/成功率/活跃用户/用户 Top） |
+| GET  | `/v1/usage/top`    | 热门问题 TopN（含语义缓存命中标记）             |
+| GET  | `/metrics`         | Prometheus 指标                                 |
 
 ## 启动
 
@@ -202,15 +202,15 @@ pre-commit run --all-files
 
 ## 主要改动说明
 
-| 改动 | 原结构 | 新结构 | 原因 |
-|------|--------|--------|------|
-| 配置集中 | `config/settings.py` + `config/loader.py` | `core/config.py`（Pydantic Settings + yaml 加载） | 配置与日志/指标/安全同属跨模块通用代码，收敛到 `core/` |
-| 领域模型 | `domain/entities/` | `domain/models/` | 命名与"业务实体/数据模型"一致 |
-| 业务服务 | `application/services/` + `application/pipelines/` | `domain/services/` | 用例编排（ChatService/Generator/RAGPipeline 等）归入领域层服务 |
-| 检索实现 | `retrieval/` 顶层 | `infrastructure/retrieval/` | 检索策略依赖 Milvus/embedding，属基础设施实现 |
-| 基础设施 | `infra/` | `infrastructure/` | 命名规范化；`vector_store/` → `database/`；`observability/`、`security/` → `core/` |
-| API 入口 | `docs_seeker/app.py` | `docs_seeker/api/main.py` | FastAPI 应用实例与中间件归入接口层 |
-| 路由目录 | `api/routes/v1/` 子目录 | `api/routes/` 拍平（`/v1` 前缀保留在聚合处） | 路由按模块组织，版本前缀由前缀管理 |
-| 测试组织 | `tests/*.py` 扁平 | `tests/unit/` + `tests/integration/` + `conftest.py` | 单测与集成测试分层 |
+| 改动     | 原结构                                             | 新结构                                               | 原因                                                                               |
+| -------- | -------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| 配置集中 | `config/settings.py` + `config/loader.py`          | `core/config.py`（Pydantic Settings + yaml 加载）    | 配置与日志/指标/安全同属跨模块通用代码，收敛到 `core/`                             |
+| 领域模型 | `domain/entities/`                                 | `domain/models/`                                     | 命名与"业务实体/数据模型"一致                                                      |
+| 业务服务 | `application/services/` + `application/pipelines/` | `domain/services/`                                   | 用例编排（ChatService/Generator/RAGPipeline 等）归入领域层服务                     |
+| 检索实现 | `retrieval/` 顶层                                  | `infra/retrieval/`                                   | 检索策略依赖 Milvus/embedding，属基础设施实现                                      |
+| 基础设施 | `infra/`                                           | `infra/`                                             | 命名规范化；`vector_store/` → `database/`；`observability/`、`security/` → `core/` |
+| API 入口 | `docs_seeker/app.py`                               | `docs_seeker/api/main.py`                            | FastAPI 应用实例与中间件归入接口层                                                 |
+| 路由目录 | `api/routes/v1/` 子目录                            | `api/routes/` 拍平（`/v1` 前缀保留在聚合处）         | 路由按模块组织，版本前缀由前缀管理                                                 |
+| 测试组织 | `tests/*.py` 扁平                                  | `tests/unit/` + `tests/integration/` + `conftest.py` | 单测与集成测试分层                                                                 |
 
 这样调整后，目录结构与目标架构保持一致，并且 README 中的设计原则说明可以帮助团队成员理解架构决策的缘由。

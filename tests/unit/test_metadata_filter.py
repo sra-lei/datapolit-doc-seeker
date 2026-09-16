@@ -4,7 +4,7 @@
 纯函数，不依赖 Milvus / LLM / Redis。
 """
 
-from docs_seeker.infrastructure.retrieval.metadata_filter import (
+from docs_seeker.infra.retrieval.metadata_filter import (
     build_milvus_expr,
     matches_metadata,
     parse_question_metadata,

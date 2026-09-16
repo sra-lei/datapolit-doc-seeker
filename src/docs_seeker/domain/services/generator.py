@@ -5,7 +5,7 @@ from loguru import logger
 from docs_seeker.core.config import prompts, settings
 from docs_seeker.domain.interfaces.llm import LLMProvider
 from docs_seeker.domain.models.chunk import Chunk
-from docs_seeker.infrastructure.llm.gateway import get_llm_gateway
+from docs_seeker.infra.llm.gateway import get_llm_gateway
 
 _DEFAULT_SYSTEM_PROMPT = (
     "你是一个专业的文档问答助手。请根据以下检索到的文档内容回答用户问题。\n"

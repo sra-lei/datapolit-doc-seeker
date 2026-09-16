@@ -11,10 +11,10 @@ from loguru import logger
 from docs_seeker.core.config import retrieval_config
 from docs_seeker.domain.interfaces.retriever import Retriever
 from docs_seeker.domain.models.chunk import Chunk
-from docs_seeker.infrastructure.retrieval.bm25_retriever import BM25Retriever
-from docs_seeker.infrastructure.retrieval.dense_retriever import DenseRetriever
-from docs_seeker.infrastructure.retrieval.metadata_filter import build_milvus_expr
-from docs_seeker.infrastructure.retrieval.summary_retriever import SummaryRetriever
+from docs_seeker.infra.retrieval.bm25_retriever import BM25Retriever
+from docs_seeker.infra.retrieval.dense_retriever import DenseRetriever
+from docs_seeker.infra.retrieval.metadata_filter import build_milvus_expr
+from docs_seeker.infra.retrieval.summary_retriever import SummaryRetriever
 
 _DEFAULT_WEIGHTS = {"dense": 0.5, "bm25": 0.3, "summary": 0.2}
 

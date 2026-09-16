@@ -8,7 +8,7 @@ from docs_seeker.api.schemas import (
     UsageTopResponse,
     UsageUserStat,
 )
-from docs_seeker.infrastructure.usage import get_usage_tracker
+from docs_seeker.infra.usage import get_usage_tracker
 
 router = APIRouter(tags=["usage"])
 

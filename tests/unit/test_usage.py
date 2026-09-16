@@ -1,7 +1,8 @@
 """RAG 使用统计单元测试（mock Redis，不依赖真实 Redis）"""
+
 from unittest.mock import patch
 
-from docs_seeker.infrastructure.usage.tracker import UsageTracker
+from docs_seeker.infra.usage.tracker import UsageTracker
 
 
 class FakeRedis:
@@ -70,7 +71,7 @@ class FakeCache:
 
 
 def _tracker(redis: FakeRedis) -> UsageTracker:
-    p = patch("docs_seeker.infrastructure.usage.tracker.get_redis_client", return_value=redis)
+    p = patch("docs_seeker.infra.usage.tracker.get_redis_client", return_value=redis)
     p.start()
     return UsageTracker()
 
@@ -114,7 +115,7 @@ def test_top_questions_sorted_with_cached_flag():
     t = _tracker(redis)
     redis.zincrby("rag:usage:top", 3, "问题A")
     redis.zincrby("rag:usage:top", 1, "问题B")
-    with patch("docs_seeker.infrastructure.cache.semantic_cache.get_semantic_cache", return_value=FakeCache()):
+    with patch("docs_seeker.infra.cache.semantic_cache.get_semantic_cache", return_value=FakeCache()):
         items = t.top_questions(limit=10)
     assert [q["question"] for q in items] == ["问题A", "问题B"]
     assert all(q["cached"] is False for q in items)
@@ -138,7 +139,7 @@ def test_redis_down_degrades_gracefully():
     def _boom():
         raise ConnectionError("redis down")
 
-    with patch("docs_seeker.infrastructure.usage.tracker.get_redis_client", side_effect=_boom):
+    with patch("docs_seeker.infra.usage.tracker.get_redis_client", side_effect=_boom):
         t = UsageTracker()
         t.record("u1", "/v1/chat", 200)  # 不应抛异常
         assert t.stats()["total_calls"] == 0

@@ -3,8 +3,8 @@
 from fastapi import APIRouter
 
 from docs_seeker.api.schemas import HealthResponse
-from docs_seeker.infrastructure.cache.semantic_cache import get_semantic_cache
-from docs_seeker.infrastructure.database.milvus_client import get_milvus_store
+from docs_seeker.infra.cache.semantic_cache import get_semantic_cache
+from docs_seeker.infra.database.milvus_client import get_milvus_store
 
 router = APIRouter(tags=["health"])
 

@@ -8,9 +8,9 @@ from loguru import logger
 from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.domain.models.query import Query
 from docs_seeker.domain.services.generator import Generator
-from docs_seeker.infrastructure.retrieval.composite_retriever import CompositeRetriever
-from docs_seeker.infrastructure.retrieval.metadata_filter import parse_question_metadata
-from docs_seeker.infrastructure.retrieval.query_decomposer import QueryDecomposer
+from docs_seeker.infra.retrieval.composite_retriever import CompositeRetriever
+from docs_seeker.infra.retrieval.metadata_filter import parse_question_metadata
+from docs_seeker.infra.retrieval.query_decomposer import QueryDecomposer
 
 
 class RAGPipeline:

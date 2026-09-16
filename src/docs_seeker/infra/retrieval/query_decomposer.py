@@ -8,7 +8,7 @@ from loguru import logger
 from docs_seeker.core.config import prompts, settings
 from docs_seeker.domain.interfaces.llm import LLMProvider
 from docs_seeker.domain.models.query import Query
-from docs_seeker.infrastructure.llm.gateway import get_llm_gateway
+from docs_seeker.infra.llm.gateway import get_llm_gateway
 
 _DEFAULT_PROMPT = (
     "你是一个查询分解助手。将以下问题分解为 2-4 个更具体的子问题，用于多路检索。\n"

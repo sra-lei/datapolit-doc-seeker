@@ -3,8 +3,8 @@
 from fastapi import APIRouter
 
 from docs_seeker.api.schemas import CacheStats, LLMStats, StatsResponse
-from docs_seeker.infrastructure.cache.semantic_cache import get_semantic_cache
-from docs_seeker.infrastructure.llm.gateway import get_llm_gateway
+from docs_seeker.infra.cache.semantic_cache import get_semantic_cache
+from docs_seeker.infra.llm.gateway import get_llm_gateway
 
 router = APIRouter(tags=["stats"])
 

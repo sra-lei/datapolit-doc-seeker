@@ -10,10 +10,10 @@ from docs_seeker.api.deps import get_chat_service, get_composite_retriever
 from docs_seeker.api.middleware import RequestLoggingMiddleware
 from docs_seeker.api.routes import router
 from docs_seeker.core.config import settings
-from docs_seeker.core.logging import setup_logging
 from docs_seeker.core.metrics import metrics_response
 from docs_seeker.domain.services.top_warmup import get_top_warmup
-from docs_seeker.infrastructure.tracing import shutdown_langfuse
+from docs_seeker.infra.logger.logging import setup_logging
+from docs_seeker.infra.tracing import shutdown_langfuse
 
 
 @asynccontextmanager

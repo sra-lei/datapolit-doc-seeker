@@ -9,11 +9,11 @@ from docs_seeker.core.config import settings
 from docs_seeker.core.security import check_injection, sanitize_output
 from docs_seeker.domain.services.generator import Generator, compute_confidence
 from docs_seeker.domain.services.rag_pipeline import RAGPipeline
-from docs_seeker.infrastructure.cache.semantic_cache import SemanticCache, get_semantic_cache
-from docs_seeker.infrastructure.retrieval.composite_retriever import CompositeRetriever
-from docs_seeker.infrastructure.retrieval.query_decomposer import QueryDecomposer
-from docs_seeker.infrastructure.tracing import FEATURE_TAG, TRACE_NAME
-from docs_seeker.infrastructure.usage import UsageTracker, get_usage_tracker
+from docs_seeker.infra.cache.semantic_cache import SemanticCache, get_semantic_cache
+from docs_seeker.infra.retrieval.composite_retriever import CompositeRetriever
+from docs_seeker.infra.retrieval.query_decomposer import QueryDecomposer
+from docs_seeker.infra.tracing import FEATURE_TAG, TRACE_NAME
+from docs_seeker.infra.usage import UsageTracker, get_usage_tracker
 
 # 写入语义缓存 / 组装响应时保留的字段（与 SourceDoc 对齐）
 CACHE_FIELDS = ("id", "text", "source", "chapter", "chapter_title", "section", "section_title", "score", "sources")

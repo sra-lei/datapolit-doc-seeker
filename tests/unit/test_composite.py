@@ -6,7 +6,7 @@ mock 三路检索器与检索配置，不依赖 Milvus / Redis / LLM。
 from unittest.mock import patch
 
 from docs_seeker.domain.models.chunk import Chunk
-from docs_seeker.infrastructure.retrieval.composite_retriever import CompositeRetriever
+from docs_seeker.infra.retrieval.composite_retriever import CompositeRetriever
 
 _CFG = {
     "rrf": {"k": 60, "weights": {"dense": 0.5, "bm25": 0.3, "summary": 0.2}},
@@ -30,10 +30,10 @@ def _chunk(cid: str) -> Chunk:
 
 def _composite(dense=None, bm25=None, summary=None) -> CompositeRetriever:
     with (
-        patch("docs_seeker.infrastructure.retrieval.composite_retriever.DenseRetriever", FakeRetriever),
-        patch("docs_seeker.infrastructure.retrieval.composite_retriever.BM25Retriever", FakeRetriever),
-        patch("docs_seeker.infrastructure.retrieval.composite_retriever.SummaryRetriever", FakeRetriever),
-        patch("docs_seeker.infrastructure.retrieval.composite_retriever.retrieval_config", _CFG),
+        patch("docs_seeker.infra.retrieval.composite_retriever.DenseRetriever", FakeRetriever),
+        patch("docs_seeker.infra.retrieval.composite_retriever.BM25Retriever", FakeRetriever),
+        patch("docs_seeker.infra.retrieval.composite_retriever.SummaryRetriever", FakeRetriever),
+        patch("docs_seeker.infra.retrieval.composite_retriever.retrieval_config", _CFG),
     ):
         comp = CompositeRetriever()
     comp.dense = FakeRetriever(dense or [])

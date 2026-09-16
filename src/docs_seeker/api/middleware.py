@@ -7,7 +7,7 @@ from loguru import logger
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from docs_seeker.core.metrics import http_request_duration_seconds, http_requests_total
-from docs_seeker.infrastructure.usage import get_usage_tracker
+from docs_seeker.infra.usage import get_usage_tracker
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
