@@ -11,13 +11,13 @@ from docs_seeker.core.config import settings
 from docs_seeker.infrastructure.retrieval.bm25_retriever import BM25Retriever
 
 DOCS_A = [
-    {"text": "文档检索系统介绍 第一 章 目录", "source": "a", "chapter": "第一章"},
-    {"text": "文档检索 高级 用法 第二 章", "source": "b", "chapter": "第二章"},
-    {"text": "无关 内容 天气 很好 今天", "source": "c", "chapter": "第三章"},
+    {"id": "doc_a", "text": "文档检索系统介绍 第一 章 目录", "source": "a", "chapter": "第一章"},
+    {"id": "doc_b", "text": "文档检索 高级 用法 第二 章", "source": "b", "chapter": "第二章"},
+    {"id": "doc_c", "text": "无关 内容 天气 很好 今天", "source": "c", "chapter": "第三章"},
 ]
 
 DOCS_B = DOCS_A + [
-    {"text": "新入库 的 文档 片段", "source": "d", "chapter": "第四章"},
+    {"id": "doc_d", "text": "新入库 的 文档 片段", "source": "d", "chapter": "第四章"},
 ]
 
 
@@ -60,6 +60,15 @@ def test_lazy_build_only_once():
     assert BM25Retriever._shared_built is True
     r2.search("文档检索", top_k=5)
     assert BM25Retriever._shared_built is True
+
+
+def test_search_preserves_document_id():
+    """BM25 的 chunk 必须带主键 id —— 缺了它上游去重会把整条召回坍缩成一条"""
+    r = _retriever(FakeMilvus(DOCS_A))
+    chunks = r.search("文档检索", top_k=5)
+    ids = [c.id for c in chunks]
+    assert len(ids) == 2
+    assert all(ids) and len(set(ids)) == 2
 
 
 def test_meta_filter_restricts_candidates():

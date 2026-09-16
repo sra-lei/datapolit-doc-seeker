@@ -76,6 +76,13 @@ class BM25Retriever(Retriever):
         cls._shared_built = True
         cls._shared_built_at = time.monotonic()
         logger.info(f"BM25 索引构建完成: docs={len(docs)} terms={len(index)}")
+        missing_id = sum(1 for doc in docs if not doc.get("id"))
+        if missing_id:
+            logger.warning(
+                f"BM25 索引有 {missing_id}/{len(docs)} 条文档没有主键 id —— "
+                "检查 MilvusStore.get_all_documents 的 output_fields 是否漏带 'id'"
+                "（缺 id 会让上游去重把 BM25 召回归并成一条）"
+            )
 
     def build_index(self, force: bool = False) -> None:
         """构建 / 重建共享索引。

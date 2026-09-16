@@ -149,12 +149,19 @@ class MilvusStore:
         )
 
     def get_all_documents(self, collection_name: str, limit: int = 10000) -> list[dict[str, Any]]:
-        """全量查询文档（BM25 建索引用）"""
+        """全量查询文档（BM25 建索引用）
+
+        ⚠️ `output_fields` **必须包含主键 `id`**：缺了它，BM25 返回的 chunk 全是
+        空 id，上游融合/去重会把它们当成同一批（历史缺陷：`rag_pipeline.prepare`
+        按 `chunk.id or ""` 去重 → BM25 召回被静默归并成一条）。本机实测：补上
+        `id` 后 BM25 召回才真正参与融合。
+        """
         try:
             results = self.client.query(
                 collection_name=collection_name,
                 filter="",
                 output_fields=[
+                    "id",
                     "text",
                     "source",
                     "pages",

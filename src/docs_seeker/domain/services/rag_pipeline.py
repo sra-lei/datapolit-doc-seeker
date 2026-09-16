@@ -1,5 +1,7 @@
 """docs-seeker - RAG 完整流程编排"""
 
+import hashlib
+
 from langfuse import get_client, observe
 from loguru import logger
 
@@ -52,13 +54,15 @@ class RAGPipeline:
         for sq in sub_questions:
             all_chunks.extend(self.retriever.search(sq, top_k=top_k, use_summary=use_summary, meta_filter=meta_filter))
 
-        # 按 id 去重（与重构前行为一致：无 id 的 chunk 视为同一批）
+        # 去重：优先按 id；无 id 的 chunk 退回「来源 + 正文」指纹（见 _dedup_key）。
+        # 历史缺陷：BM25 的 chunk 曾因全量查询漏带主键 id 而全是空 id，
+        # `chunk.id or ""` 把整条 BM25 召回归并成一条 —— 现在有指纹兜底。
         seen: set[str] = set()
         deduped: list[Chunk] = []
         for chunk in all_chunks:
-            chunk_id = chunk.id or ""
-            if chunk_id not in seen:
-                seen.add(chunk_id)
+            chunk_key = _dedup_key(chunk)
+            if chunk_key not in seen:
+                seen.add(chunk_key)
                 deduped.append(chunk)
         deduped = deduped[:top_k]
         get_client().update_current_span(output={"chunks": len(deduped), "sub_questions": sub_questions})
@@ -83,3 +87,17 @@ class RAGPipeline:
         answer, confidence = self.generator.generate(question, deduped, conversation_history)
         logger.info(f"RAG 流程完成: sub_questions={len(sub_questions)} deduped={len(deduped)} confidence={confidence}")
         return answer, confidence, deduped, sub_questions
+
+
+def _dedup_key(chunk: Chunk) -> str:
+    """去重键：优先 ``chunk.id``；无 id 时退回「来源 + 正文」指纹。
+
+    为什么需要指纹兜底：BM25 的 chunk 来自 Milvus 全量查询，一旦该查询漏带主键
+    `id`（历史缺陷，见 `MilvusStore.get_all_documents`），所有 BM25 结果都会落到
+    空 id 上——旧的 `chunk.id or ""` 会把整条 BM25 召回静默归并成一条。指纹保证
+    「内容不同的片段不会被当成同一个」，同时内容相同的重复片段仍会正常合并。
+    """
+    if chunk.id:
+        return chunk.id
+    digest = hashlib.md5(f"{chunk.source}|{chunk.text}".encode(), usedforsecurity=False).hexdigest()[:16]
+    return f"noid:{digest}"
