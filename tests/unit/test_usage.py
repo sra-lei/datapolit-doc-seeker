@@ -1,10 +1,11 @@
 """RAG 使用统计单元测试（FakeStore，不依赖真实 Redis）"""
 
+from docs_seeker.domain.interfaces.usage import CallStats, UserCalls
 from docs_seeker.domain.services.usage import UsageTracker
 
 
 class FakeStore:
-    """实现 UsageStore 原语的内存假存储"""
+    """实现 UsageStore 业务操作的内存假存储"""
 
     def __init__(self):
         self.total = 0
@@ -17,54 +18,29 @@ class FakeStore:
         if self.fail:
             raise ConnectionError("redis down")
 
-    def incr_total(self):
+    def record_call(self, uid, ok):
         self._guard()
         self.total += 1
+        if ok:
+            self.success += 1
+        rec = self.users.setdefault(uid, [0, 0])
+        rec[0] += 1
+        if ok:
+            rec[1] += 1
 
-    def incr_success(self):
-        self._guard()
-        self.success += 1
-
-    def incr_user_total(self, uid):
-        self._guard()
-        self.users.setdefault(uid, [0, 0])[0] += 1
-
-    def incr_user_success(self, uid):
-        self._guard()
-        self.users.setdefault(uid, [0, 0])[1] += 1
-
-    def add_user(self, uid):
-        self._guard()
-        self.users.setdefault(uid, [0, 0])
-
-    def get_total(self):
-        self._guard()
-        return self.total
-
-    def get_success(self):
-        self._guard()
-        return self.success
-
-    def get_users(self):
-        self._guard()
-        return set(self.users)
-
-    def get_user_total(self, uid):
-        self._guard()
-        return self.users.get(uid, [0, 0])[0]
-
-    def get_user_success(self, uid):
-        self._guard()
-        return self.users.get(uid, [0, 0])[1]
-
-    def incr_top(self, question):
+    def record_question(self, question):
         self._guard()
         self.top[question] = self.top.get(question, 0) + 1
 
     def top_questions(self, limit):
         self._guard()
         items = sorted(self.top.items(), key=lambda kv: kv[1], reverse=True)
-        return [(q, float(c)) for q, c in items[:limit]]
+        return [(q, c) for q, c in items[:limit]]
+
+    def call_stats(self):
+        self._guard()
+        users = [UserCalls(user_id=uid, total=rec[0], success=rec[1]) for uid, rec in self.users.items()]
+        return CallStats(total=self.total, success=self.success, users=users)
 
 
 class FakeCache:

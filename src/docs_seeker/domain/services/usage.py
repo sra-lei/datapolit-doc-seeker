@@ -43,13 +43,7 @@ class UsageTracker:
         uid = (user_id or _ANONYMOUS)[:64]
         ok = 200 <= status < 400
         try:
-            self._store.incr_total()
-            if ok:
-                self._store.incr_success()
-            self._store.incr_user_total(uid)
-            if ok:
-                self._store.incr_user_success(uid)
-            self._store.add_user(uid)
+            self._store.record_call(uid, ok)
         except Exception as e:
             logger.warning(f"[Usage] 记录失败（统计降级）: {e}")
 
@@ -71,7 +65,7 @@ class UsageTracker:
         if len(q) < 2 or len(q) > 200:
             return
         try:
-            self._store.incr_top(q)
+            self._store.record_question(q)
         except Exception as e:
             logger.warning(f"[Usage] 记录问题失败（统计降级）: {e}")
 
@@ -89,7 +83,7 @@ class UsageTracker:
                 if not q:
                     continue
                 cached = self._cache.search(q) is not None
-                result.append({"question": q, "count": int(score), "cached": cached})
+                result.append({"question": q, "count": score, "cached": cached})
             return result
         except Exception as e:
             logger.warning(f"[Usage] 热门问题查询失败（降级）: {e}")
@@ -113,27 +107,21 @@ class UsageTracker:
             "users": [],
         }
         try:
-            total = self._store.get_total()
-            success = self._store.get_success()
-            users = self._store.get_users()
-
-            user_list: list[dict[str, Any]] = []
-            for uid in users:
-                ut = self._store.get_user_total(uid)
-                us = self._store.get_user_success(uid)
-                user_list.append(
-                    {
-                        "user_id": uid,
-                        "calls": ut,
-                        "success_rate": f"{us / ut:.1%}" if ut else "0.0%",
-                    }
-                )
+            stats = self._store.call_stats()
+            user_list: list[dict[str, Any]] = [
+                {
+                    "user_id": u.user_id,
+                    "calls": u.total,
+                    "success_rate": f"{u.success / u.total:.1%}" if u.total else "0.0%",
+                }
+                for u in stats.users
+            ]
             user_list.sort(key=lambda x: x["calls"], reverse=True)
 
             return {
-                "total_calls": total,
-                "success_calls": success,
-                "success_rate": f"{success / total:.1%}" if total else "0.0%",
+                "total_calls": stats.total,
+                "success_calls": stats.success,
+                "success_rate": f"{stats.success / stats.total:.1%}" if stats.total else "0.0%",
                 "active_users": len(user_list),
                 "users": user_list[:top_n],
             }

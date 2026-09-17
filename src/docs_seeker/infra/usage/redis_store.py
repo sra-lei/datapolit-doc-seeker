@@ -1,11 +1,11 @@
 """docs-seeker - 使用统计的 Redis 存储实现
 
-只做 Redis 原语读写（键统一 ``rag:usage:*`` 前缀），不含业务口径。
-业务规则（成功判定 / 问题归一化 / TopN 聚合）在 domain 的 ``UsageTracker``。
-Redis 不可用时抛异常，由上层（UsageTracker）静默降级。
+实现 ``UsageStore`` 的业务操作，内部处理键结构（``rag:usage:*`` 前缀）与 Redis
+命令（pipeline / ZSet / Set / 计数器）。业务口径（成功判定 / 归一化 / 聚合格式）
+在 domain 的 ``UsageTracker``。Redis 不可用时抛异常，由上层静默降级。
 """
 
-from docs_seeker.domain.interfaces.usage import UsageStore
+from docs_seeker.domain.interfaces.usage import CallStats, UsageStore, UserCalls
 from docs_seeker.infra.cache.redis_client import get_redis_client
 
 _PREFIX = "rag:usage"
@@ -18,45 +18,42 @@ class RedisUsageStore(UsageStore):
     def _key(*parts: str) -> str:
         return ":".join((_PREFIX, *parts))
 
-    def incr_total(self) -> None:
-        get_redis_client().incr(self._key("total"))
+    def record_call(self, uid: str, ok: bool) -> None:
+        redis = get_redis_client()
+        pipe = redis.pipeline()
+        pipe.incr(self._key("total"))
+        if ok:
+            pipe.incr(self._key("success"))
+        pipe.incr(self._key("user", uid, "total"))
+        if ok:
+            pipe.incr(self._key("user", uid, "success"))
+        pipe.sadd(self._key("users"), uid)
+        pipe.execute()
 
-    def incr_success(self) -> None:
-        get_redis_client().incr(self._key("success"))
-
-    def incr_user_total(self, uid: str) -> None:
-        get_redis_client().incr(self._key("user", uid, "total"))
-
-    def incr_user_success(self, uid: str) -> None:
-        get_redis_client().incr(self._key("user", uid, "success"))
-
-    def add_user(self, uid: str) -> None:
-        get_redis_client().sadd(self._key("users"), uid)
-
-    def get_total(self) -> int:
-        return int(get_redis_client().get(self._key("total")) or 0)
-
-    def get_success(self) -> int:
-        return int(get_redis_client().get(self._key("success")) or 0)
-
-    def get_users(self) -> set[str]:
-        return {str(u) for u in (get_redis_client().smembers(self._key("users")) or set())}
-
-    def get_user_total(self, uid: str) -> int:
-        return int(get_redis_client().get(self._key("user", uid, "total")) or 0)
-
-    def get_user_success(self, uid: str) -> int:
-        return int(get_redis_client().get(self._key("user", uid, "success")) or 0)
-
-    def incr_top(self, question: str) -> None:
+    def record_question(self, question: str) -> None:
         get_redis_client().zincrby(self._key("top"), 1, question)
 
-    def top_questions(self, limit: int) -> list[tuple[str, float]]:
+    def top_questions(self, limit: int) -> list[tuple[str, int]]:
         # withscores=True 时返回 [(member, score), ...]
-        return [
-            (str(member), float(score))
-            for member, score in get_redis_client().zrevrange(self._key("top"), 0, max(limit - 1, 0), withscores=True)
-        ]
+        items = get_redis_client().zrevrange(self._key("top"), 0, max(limit - 1, 0), withscores=True)
+        return [(str(member), int(score)) for member, score in items]
+
+    def call_stats(self) -> CallStats:
+        redis = get_redis_client()
+        total = int(redis.get(self._key("total")) or 0)
+        success = int(redis.get(self._key("success")) or 0)
+        users = redis.smembers(self._key("users")) or set()
+        user_list: list[UserCalls] = []
+        for uid in users:
+            uid_str = str(uid)
+            user_list.append(
+                UserCalls(
+                    user_id=uid_str,
+                    total=int(redis.get(self._key("user", uid_str, "total")) or 0),
+                    success=int(redis.get(self._key("user", uid_str, "success")) or 0),
+                )
+            )
+        return CallStats(total=total, success=success, users=user_list)
 
 
 _usage_store: RedisUsageStore | None = None
