@@ -2,13 +2,13 @@
 
 from fastapi import APIRouter, Query
 
+from docs_seeker.api.deps import get_usage_tracker
 from docs_seeker.api.schemas import (
     UsageStatsResponse,
     UsageTopQuestion,
     UsageTopResponse,
     UsageUserStat,
 )
-from docs_seeker.infra.usage import get_usage_tracker
 
 router = APIRouter(tags=["usage"])
 

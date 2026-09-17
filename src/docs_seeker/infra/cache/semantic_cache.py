@@ -12,13 +12,14 @@ from loguru import logger
 
 from docs_seeker.core.config import settings
 from docs_seeker.core.metrics import cache_hits_total, cache_misses_total
+from docs_seeker.domain.interfaces.cache import SemanticCachePort
 from docs_seeker.infra.cache.redis_client import get_redis_client
 from docs_seeker.infra.embedding.embedder import get_embedder
 
 _INDEX_NAME = "qa_cache_idx"
 
 
-class SemanticCache:
+class SemanticCache(SemanticCachePort):
     """基于 Redis Stack 向量搜索的语义缓存
 
     - 开关：环境变量 `SEMANTIC_CACHE_ENABLED`（默认 true；false 时完全不连接 Redis 做缓存读写）

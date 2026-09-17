@@ -5,11 +5,12 @@ from docs_seeker.domain.services.chat_service import ChatService
 from docs_seeker.domain.services.generator import Generator
 from docs_seeker.domain.services.guards import get_guard_chain
 from docs_seeker.domain.services.query_decomposer import QueryDecomposer
+from docs_seeker.domain.services.usage import UsageTracker
 from docs_seeker.infra.cache.semantic_cache import get_semantic_cache
 from docs_seeker.infra.llm.client import get_llm_client
 from docs_seeker.infra.retrieval.composite_retriever import CompositeRetriever
 from docs_seeker.infra.retrieval.hybrid_router import HybridRouter
-from docs_seeker.infra.usage import get_usage_tracker
+from docs_seeker.infra.usage import get_usage_store
 
 _composite_retriever: CompositeRetriever | None = None
 _generator: Generator | None = None
@@ -17,6 +18,7 @@ _query_decomposer: QueryDecomposer | None = None
 _hybrid_router: HybridRouter | None = None
 _chat_service: ChatService | None = None
 _agent_runner: AgentRunner | None = None
+_usage_tracker: UsageTracker | None = None
 
 
 def get_composite_retriever() -> CompositeRetriever:
@@ -56,6 +58,13 @@ def get_agent_runner() -> AgentRunner:
             retriever=get_composite_retriever(),
         )
     return _agent_runner
+
+
+def get_usage_tracker() -> UsageTracker:
+    global _usage_tracker
+    if _usage_tracker is None:
+        _usage_tracker = UsageTracker(store=get_usage_store(), cache=get_semantic_cache())
+    return _usage_tracker
 
 
 def get_chat_service() -> ChatService:

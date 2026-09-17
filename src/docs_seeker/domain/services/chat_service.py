@@ -6,14 +6,14 @@ from langfuse import get_client, observe, propagate_attributes
 from loguru import logger
 
 from docs_seeker.core.config import settings
+from docs_seeker.domain.interfaces.cache import SemanticCachePort
 from docs_seeker.domain.interfaces.retriever import Retriever
 from docs_seeker.domain.services.generator import Generator, compute_confidence
 from docs_seeker.domain.services.guards import ANSWER_CTX, DOCUMENT_CTX, USER_INPUT_CTX, GuardChain, get_guard_chain
 from docs_seeker.domain.services.query_decomposer import QueryDecomposer
 from docs_seeker.domain.services.rag_pipeline import RAGPipeline
-from docs_seeker.infra.cache.semantic_cache import SemanticCache
+from docs_seeker.domain.services.usage import UsageTracker
 from docs_seeker.infra.tracing import FEATURE_TAG, TRACE_NAME
-from docs_seeker.infra.usage import UsageTracker
 
 # 写入语义缓存 / 组装响应时保留的字段（与 SourceDoc 对齐）
 CACHE_FIELDS = ("id", "text", "source", "chapter", "chapter_title", "section", "section_title", "score", "sources")
@@ -38,7 +38,7 @@ class ChatService:
         retriever: Retriever,
         generator: Generator,
         decomposer: QueryDecomposer,
-        cache: SemanticCache,
+        cache: SemanticCachePort,
         usage_tracker: UsageTracker,
         agent_runner=None,
         guards: GuardChain | None = None,

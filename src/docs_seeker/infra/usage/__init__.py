@@ -1,5 +1,9 @@
-"""docs-seeker - RAG 使用统计（实现见 tracker.py，此处仅做兼容导出）"""
+"""docs-seeker - RAG 使用统计存储（Redis 实现）
 
-from docs_seeker.infra.usage.tracker import UsageTracker, get_usage_tracker
+业务口径（成功判定 / 归一化 / 聚合）在 domain 的 ``UsageTracker``（domain/services/usage.py），
+本模块只提供 Redis 存储原语 ``RedisUsageStore`` 及其单例工厂。
+"""
 
-__all__ = ["UsageTracker", "get_usage_tracker"]
+from docs_seeker.infra.usage.redis_store import RedisUsageStore, get_usage_store
+
+__all__ = ["RedisUsageStore", "get_usage_store"]

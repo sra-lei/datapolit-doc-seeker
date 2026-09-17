@@ -1,23 +1,21 @@
 """
-docs-seeker - RAG 使用统计（按用户维度，Redis 持久化）
+docs-seeker - RAG 使用统计（领域服务）
 
-独立于语义缓存（SEMANTIC_CACHE_ENABLED 开关不影响统计）：
-- 复用 redis_client 单例，键统一使用 rag:usage:* 前缀
-- 记录端：中间件对 /v1/chat 请求做轻量埋点（用户、成功与否）；
-  chat_service 对问题文本做热门计数（rag:usage:top ZSet，精确匹配归并）
-- 查询端：/v1/usage/stats 聚合（总次数/成功率/活跃用户/用户 Top）；
-  /v1/usage/top 返回热门问题 TopN（含语义缓存命中标记，供预热器与 ChatWidget 欢迎语）
-- Redis 不可用时静默降级：埋点跳过、查询返回空结构，不影响主流程
+业务口径全部在此：哪些请求算使用（_TRACKED_PATHS）、什么算成功（2xx/3xx）、
+问题怎么归一化（精确匹配归并粒度）、TopN 与聚合怎么算。持久化交给注入的
+``UsageStore``（infra 提供 Redis 实现），缓存命中判断交给注入的
+``SemanticCachePort`` —— domain 不感知 Redis。
+
+Redis 不可用时静默降级：记录跳过、查询返回空结构，不影响主流程。
 """
 
 import re
-from typing import Any, cast
+from typing import Any
 
 from loguru import logger
 
-from docs_seeker.infra.cache.redis_client import get_redis_client
-
-_PREFIX = "rag:usage"
+from docs_seeker.domain.interfaces.cache import SemanticCachePort
+from docs_seeker.domain.interfaces.usage import UsageStore
 
 # 需要统计的 RAG 接口
 _TRACKED_PATHS = {"/v1/chat"}
@@ -26,11 +24,11 @@ _ANONYMOUS = "anonymous"
 
 
 class UsageTracker:
-    """RAG 使用统计：记录 + 聚合"""
+    """RAG 使用统计：记录 + 聚合（业务规则层，存储走 UsageStore）"""
 
-    @staticmethod
-    def _key(*parts: str) -> str:
-        return ":".join((_PREFIX, *parts))
+    def __init__(self, store: UsageStore, cache: SemanticCachePort):
+        self._store = store
+        self._cache = cache
 
     def record(self, user_id: str, path: str, status: int) -> None:
         """记录一次 RAG 请求
@@ -45,16 +43,13 @@ class UsageTracker:
         uid = (user_id or _ANONYMOUS)[:64]
         ok = 200 <= status < 400
         try:
-            redis = get_redis_client()
-            pipe = redis.pipeline()
-            pipe.incr(self._key("total"))
+            self._store.incr_total()
             if ok:
-                pipe.incr(self._key("success"))
-            pipe.incr(self._key("user", uid, "total"))
+                self._store.incr_success()
+            self._store.incr_user_total(uid)
             if ok:
-                pipe.incr(self._key("user", uid, "success"))
-            pipe.sadd(self._key("users"), uid)
-            pipe.execute()
+                self._store.incr_user_success(uid)
+            self._store.add_user(uid)
         except Exception as e:
             logger.warning(f"[Usage] 记录失败（统计降级）: {e}")
 
@@ -70,14 +65,13 @@ class UsageTracker:
     def record_question(self, question: str) -> None:
         """记录一次 chat 问题（热门问题 TopN 计数，精确匹配归并）
 
-        仅记录归一化后 2~200 字符的问题；Redis 不可用时静默降级。
+        仅记录归一化后 2~200 字符的问题；存储不可用时静默降级。
         """
         q = self._normalize_question(question)
         if len(q) < 2 or len(q) > 200:
             return
         try:
-            redis = get_redis_client()
-            redis.zincrby(self._key("top"), 1, q)
+            self._store.incr_top(q)
         except Exception as e:
             logger.warning(f"[Usage] 记录问题失败（统计降级）: {e}")
 
@@ -88,23 +82,13 @@ class UsageTracker:
             [{"question": str, "count": int, "cached": bool}, ...]
         """
         try:
-            redis = get_redis_client()
-            # withscores=True 时返回 [(member, score), ...]
-            items = cast(
-                list[tuple[str, float]],
-                redis.zrevrange(self._key("top"), 0, max(limit - 1, 0), withscores=True),
-            )
-            # 函数内导入：避免中间件链路加载缓存模块（embedder/OpenAI）
-            from docs_seeker.infra.cache.semantic_cache import get_semantic_cache
-
-            cache = get_semantic_cache()
-
+            items = self._store.top_questions(limit)
             result = []
             for member, score in items:
                 q = str(member)
                 if not q:
                     continue
-                cached = cache.search(q) is not None
+                cached = self._cache.search(q) is not None
                 result.append({"question": q, "count": int(score), "cached": cached})
             return result
         except Exception as e:
@@ -129,19 +113,17 @@ class UsageTracker:
             "users": [],
         }
         try:
-            redis = get_redis_client()
-            total = int(redis.get(self._key("total")) or 0)
-            success = int(redis.get(self._key("success")) or 0)
-            users = redis.smembers(self._key("users")) or set()
+            total = self._store.get_total()
+            success = self._store.get_success()
+            users = self._store.get_users()
 
             user_list: list[dict[str, Any]] = []
             for uid in users:
-                uid_str = str(uid)
-                ut = int(redis.get(self._key("user", uid_str, "total")) or 0)
-                us = int(redis.get(self._key("user", uid_str, "success")) or 0)
+                ut = self._store.get_user_total(uid)
+                us = self._store.get_user_success(uid)
                 user_list.append(
                     {
-                        "user_id": uid_str,
+                        "user_id": uid,
                         "calls": ut,
                         "success_rate": f"{us / ut:.1%}" if ut else "0.0%",
                     }
@@ -158,13 +140,3 @@ class UsageTracker:
         except Exception as e:
             logger.warning(f"[Usage] 聚合统计失败（降级）: {e}")
             return empty
-
-
-_usage_tracker: UsageTracker | None = None
-
-
-def get_usage_tracker() -> UsageTracker:
-    global _usage_tracker
-    if _usage_tracker is None:
-        _usage_tracker = UsageTracker()
-    return _usage_tracker

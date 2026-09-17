@@ -13,11 +13,11 @@ import threading
 
 from loguru import logger
 
+from docs_seeker.api.deps import get_usage_tracker
 from docs_seeker.core.config import settings
 from docs_seeker.domain.services.chat_service import CACHE_FIELDS, ChatService
 from docs_seeker.domain.services.guards import ANSWER_CTX
 from docs_seeker.infra.cache.redis_client import get_redis_client
-from docs_seeker.infra.usage import get_usage_tracker
 
 _LOCK_KEY = "rag:warmup:lock"
 
