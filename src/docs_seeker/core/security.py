@@ -32,15 +32,34 @@ OFF_TOPIC_PATTERNS = [
 ]
 
 
-def check_injection(question: str) -> tuple[bool, str]:
+def check_injection_patterns(question: str) -> tuple[bool, str]:
+    """提示注入检测（不含话题白名单）"""
     question_lower = question.lower()
     for pattern in INJECTION_PATTERNS:
         if re.search(pattern, question_lower):
             return False, "检测到提示注入模式，请求已拒绝"
+    return True, ""
+
+
+def check_off_topic(question: str) -> tuple[bool, str]:
+    """话题白名单检测（是否超出职责范围）"""
+    question_lower = question.lower()
     for pattern in OFF_TOPIC_PATTERNS:
         if re.search(pattern, question_lower):
             return False, "该问题超出了我的职责范围（公司政策查询）"
     return True, ""
+
+
+def check_injection(question: str) -> tuple[bool, str]:
+    """输入侧综合检测：先提示注入、后话题白名单。
+
+    （保留此组合入口以兼容既有调用方；护栏链路分别用上面两个细分函数，
+    见 ``domain/services/guards``。）
+    """
+    ok, reason = check_injection_patterns(question)
+    if not ok:
+        return ok, reason
+    return check_off_topic(question)
 
 
 SENSITIVE_PATTERNS = [

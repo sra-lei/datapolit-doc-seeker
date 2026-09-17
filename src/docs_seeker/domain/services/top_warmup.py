@@ -6,7 +6,7 @@ docs-seeker - 热门问题预热器（P4）
 注意：预热直接走 pipeline + cache.store（不经 chat()），避免：
 - 重复的问题计数（record_question）
 - 重复的注入检测/脱敏链路
-数据写入与 chat 路径保持一致的格式（CACHE_FIELDS + sanitize_output）。
+数据写入与 chat 路径保持一致的格式（CACHE_FIELDS + 护栏链路脱敏）。
 """
 
 import threading
@@ -14,8 +14,8 @@ import threading
 from loguru import logger
 
 from docs_seeker.core.config import settings
-from docs_seeker.core.security import sanitize_output
 from docs_seeker.domain.services.chat_service import CACHE_FIELDS, ChatService
+from docs_seeker.domain.services.guards import ANSWER_CTX
 from docs_seeker.infra.cache.redis_client import get_redis_client
 from docs_seeker.infra.usage import get_usage_tracker
 
@@ -77,7 +77,7 @@ class TopQuestionWarmup:
                 logger.info(f"[warmup] 预热: {question[:40]}")
                 try:
                     answer, confidence, chunks, _ = service.pipeline.run(question, top_k=10)
-                    answer = sanitize_output(answer)
+                    answer = service.guards.inspect(answer, ANSWER_CTX).text
                     source_dicts = [{k: v for k, v in chunk.to_dict().items() if k in CACHE_FIELDS} for chunk in chunks]
                     service.cache.store(
                         question,

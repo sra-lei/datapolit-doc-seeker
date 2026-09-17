@@ -227,7 +227,7 @@ domain/services/
 | **0** | `LLMRequest` 加 `extra` / `meta`；`None` 不下发；`LLMResponse` 信封**直接启用**（无兼容开关），调用点 + 鸭子替身一次性迁移 | 新单测：`extra` 原样到达 SDK、`None` 字段不出现、`meta` 不进 payload、`raw` 与原始响应同一对象 | 单 commit 回滚（`git revert`） |
 | **1** | Middleware 骨架 + `Transport` 级把 retry/circuit/fallback/observability 从 gateway 内联逻辑搬成插件 | 现有 `test_llm_gateway.py` 3 项全绿 + 新增「fallback_used 标记」用例 | **一步到位**（评审已决）：无内联回退路径，回退靠 `git revert`；运行期可用 `LLM_TRANSPORT_MIDDLEWARES` 裁剪链路 |
 | **2** | `BudgetGuardMiddleware` 收编 generator / decomposer 的重复兜底 | `test_llm_budget_guard.py` 全部用例的调用次数与预算序列不变 + 新增「按请求启用」用例 | 回退靠 `git revert`；运行期可用 `LLM_TRANSPORT_MIDDLEWARES` 去掉 `budget_guard` |
-| **3** | Guard 全部 middleware 化并按评审**挂两处**（pipeline 边界 + gateway 内）；`chat_service` / `top_warmup` 只留一行链式调用；**新增文档正文注入扫描（仅告警）** | `test_guard.py` 全绿 + 新用例「文档内含注入指令 → 有告警日志、答案不变」+「agent 内部 LLM 调用经过 guard 链」 | 开关切回直接函数调用 |
+| **3** | Guard 全部 middleware 化并按评审**挂两处**（pipeline 边界 + gateway 内）；`chat_service` / `top_warmup` 只留一行链式调用；**新增文档正文注入扫描（仅告警）** | `test_guard.py` 全绿 + 新用例「文档内含注入指令 → 有告警日志、答案不变」+「agent 内部 LLM 调用经过 guard 链」 | 回退靠 `git revert`；运行期可用 `LLM_GUARDS` 裁剪护栏集合 |
 | **4** | 清理死代码（`CircuitBreaker.call` 改为真用）、单例改 deps 注入、错误链修复 | 全量单测 + 端到端一问（`/v1/chat`） | — |
 | **5** | 文档 + 评估（口径不变：`LLM_TEMPERATURE=0` + `LLM_GENERATE_MODEL=deepseek-chat`） | 22 题均分不低于当前 21/22 基线 | — |
 
@@ -321,4 +321,33 @@ domain/services/
   16 token 打真实推理模型，**SDK 调用预算序列 `[16, 16000]`**、正文 `'收到'`，同时打出
   middleware 的「正文为空且被截断…重试一次」告警。只看正文会有歧义（小预算也可能碰巧
   吐出正文），所以该用例以**实际 SDK 调用序列**判定。
+
+### Phase 3（guard middleware 化 + 双插槽）✅ 2026-09-17
+
+- **新增 `domain/services/guards/`**：
+  - `base.py`：`Guard` 协议（`inspect(text, ctx) -> GuardVerdict`）、`GuardContext`（挂载点
+    `pipeline_boundary` / `gateway_inner` × 作用对象 `user_input` / `document` / `answer` /
+    `llm_messages` × `can_block`）、`GuardChain`（顺序执行、拦截短路、改写逐级传递）；
+  - `builtin.py`：`InjectionGuard` / `TopicPolicyGuard` / `PIIRedactionGuard` +
+    `build_guard_chain()`（配置 `LLM_GUARDS`，空 = 全部内置）+ `get_guard_chain()` 单例。
+    模式表仍留在 `core/security.py`（新增细分的 `check_injection_patterns` / `check_off_topic`，
+    `check_injection` 作为组合入口保留，兼容既有调用方与 `test_guard.py`）；
+  - `llm_guard.py`：`LLMGuardMiddleware`（gateway 内挂载，扫**非 system** 消息，仅告警）。
+- **两处挂载**：
+  1. **pipeline 边界**（`ChatService.chat` / `chat_stream` / `top_warmup`）：用户输入命中 → 拒答；
+     最终答案 → 脱敏改写；**检索文档正文 → 仅告警、答案不变**；
+  2. **gateway 内**（transport 链最外层 `guard`）：agent 循环内每次 LLM 调用都过护栏，
+     **只告警不短路**。
+- **协议实现说明（对方案 §2.4 草图的偏离，需知悉）**：草图写的是 `before / after / on_error`
+  三段式；实现改为**洋葱式 `__call__(request, ctx, call_next)`** —— 重试/降级需要「自己决定
+  调用几次、换不换 provider」，三段式 hook 表达不了。guard 复用同一协议（它天然是「调用前
+  检查」），避免出现两套中间件抽象。
+- **调用点收敛**：`chat_service` / `top_warmup` 里手写的 `check_injection` / `sanitize_output`
+  （原先 3 个入口各一份）全部换成 `self.guards.inspect(...)` 单行调用；`api/deps.py` 显式注入。
+- **验证**：`ruff` 通过；`pytest` **136 passed**（119 + 新增 `test_guards_chain.py` 17 项：边界
+  拒答 / 话题 / 文档仅告警 / messages 不短路 / 答案脱敏 / 输入不脱敏 / 链路配置与短路 /
+  ChatService 边界与文档扫描 / gateway 内挂载（含「system 消息不扫」）/ `applied_middlewares`
+  含 guard）；真实 API 冒烟 4 条仍全过（guard 已是最外层，正常提示无误报、调用不受影响）；
+  `api.deps` / `top_warmup` / guards 导入链自检通过。
+- **未做**：错误模型与死代码收尾（Phase 4）/ 评估回归（Phase 5）。
 

@@ -80,6 +80,10 @@ class Settings(BaseSettings):
     # 这是熔断的预期行为；若希望故障期继续对外服务，请配备用 provider。
     llm_circuit_failure_threshold: int = 5
     llm_circuit_recovery_seconds: int = 60
+    # 应用级护栏链（逗号分隔，顺序 = 执行顺序；空 = 全部内置）。
+    # 可选：injection_guard（提示注入）/ topic_policy（话题白名单）/ pii_redaction（输出脱敏）。
+    # 同一份配置同时用于 pipeline 边界（可拒答/可改写）与 gateway 内（仅告警）两处挂载。
+    llm_guards: str = ""
 
     # 采样温度。0 = 确定性输出（**评估与 A/B 必须用 0**：同代码同语料下单轮
     # 22 题的分数摆幅曾达 0.75，噪声大于待测改动的量级）；>0 = 保留多样性。

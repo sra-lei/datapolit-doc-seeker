@@ -3,6 +3,7 @@
 from docs_seeker.agent.runner import AgentRunner
 from docs_seeker.domain.services.chat_service import ChatService
 from docs_seeker.domain.services.generator import Generator
+from docs_seeker.domain.services.guards import get_guard_chain
 from docs_seeker.infra.cache.semantic_cache import get_semantic_cache
 from docs_seeker.infra.llm.gateway import get_llm_gateway
 from docs_seeker.infra.retrieval.composite_retriever import CompositeRetriever
@@ -69,5 +70,7 @@ def get_chat_service() -> ChatService:
             cache=get_semantic_cache(),
             usage_tracker=get_usage_tracker(),
             agent_runner=get_agent_runner(),
+            # 护栏链：与 gateway 内那处共用同一份配置/实例
+            guards=get_guard_chain(),
         )
     return _chat_service

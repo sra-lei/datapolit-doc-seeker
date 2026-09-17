@@ -6,8 +6,8 @@ from langfuse import get_client, observe, propagate_attributes
 from loguru import logger
 
 from docs_seeker.core.config import settings
-from docs_seeker.core.security import check_injection, sanitize_output
 from docs_seeker.domain.services.generator import Generator, compute_confidence
+from docs_seeker.domain.services.guards import ANSWER_CTX, DOCUMENT_CTX, USER_INPUT_CTX, GuardChain, get_guard_chain
 from docs_seeker.domain.services.rag_pipeline import RAGPipeline
 from docs_seeker.infra.cache.semantic_cache import SemanticCache, get_semantic_cache
 from docs_seeker.infra.retrieval.composite_retriever import CompositeRetriever
@@ -41,6 +41,7 @@ class ChatService:
         cache: SemanticCache | None = None,
         usage_tracker: UsageTracker | None = None,
         agent_runner=None,
+        guards: GuardChain | None = None,
     ):
         # 允许注入共享依赖（deps 组装点传入）；缺省时自建/走全局单例（独立使用场景）
         self.pipeline = RAGPipeline(retriever=retriever, decomposer=decomposer, generator=generator)
@@ -49,6 +50,8 @@ class ChatService:
         # Agentic M1：默认关闭（settings.agent_enabled）；开启后 agent 路径任何异常
         # 都回退下面的旧单轮管线，保证可灰度可回退
         self.agent_runner = agent_runner
+        # 护栏链路：边界挂载（可拒答/可改写）；与 gateway 内那处共用同一份配置
+        self.guards = guards or get_guard_chain()
 
     @observe(name=TRACE_NAME, capture_input=False, capture_output=False)
     def chat(
@@ -71,10 +74,10 @@ class ChatService:
             environment=settings.environment.lower(),
             metadata={"route": "/v1/chat"},
         ):
-            ok, reason = check_injection(question)
-            if not ok:
-                langfuse.update_current_span(level="ERROR", status_message=reason, output={"answer": reason})
-                return ChatResult(answer=reason, confidence="low")
+            verdict = self.guards.inspect(question, USER_INPUT_CTX)
+            if not verdict.allowed:
+                langfuse.update_current_span(level="ERROR", status_message=verdict.reason, output={"answer": verdict.reason})
+                return ChatResult(answer=verdict.reason, confidence="low")
 
             # 热门问题计数（精确匹配归并；Redis 不可用时降级）
             self.usage_tracker.record_question(question)
@@ -119,7 +122,8 @@ class ChatService:
                 answer, confidence, chunks, sub_questions = self.pipeline.run(
                     question, top_k=top_k, conversation_history=history
                 )
-            answer = sanitize_output(answer)
+            self._inspect_documents(chunks)
+            answer = self.guards.inspect(answer, ANSWER_CTX).text
             source_dicts = [{k: v for k, v in chunk.to_dict().items() if k in CACHE_FIELDS} for chunk in chunks]
 
             if use_cache and answer.strip():
@@ -168,10 +172,10 @@ class ChatService:
             environment=settings.environment.lower(),
             metadata={"route": "/v1/chat"},
         ):
-            ok, reason = check_injection(question)
-            if not ok:
-                langfuse.update_current_span(level="ERROR", status_message=reason, output={"answer": reason})
-                yield {"type": "error", "message": reason}
+            verdict = self.guards.inspect(question, USER_INPUT_CTX)
+            if not verdict.allowed:
+                langfuse.update_current_span(level="ERROR", status_message=verdict.reason, output={"answer": verdict.reason})
+                yield {"type": "error", "message": verdict.reason}
                 return
 
             # 热门问题计数（精确匹配归并；Redis 不可用时降级）
@@ -204,6 +208,7 @@ class ChatService:
                     return
 
             chunks, sub_questions = self.pipeline.prepare(question, top_k=top_k, conversation_history=history)
+            self._inspect_documents(chunks)
             source_dicts = [{k: v for k, v in chunk.to_dict().items() if k in CACHE_FIELDS} for chunk in chunks]
             query_decomposed = sub_questions if len(sub_questions) > 1 else None
 
@@ -226,7 +231,7 @@ class ChatService:
                 yield {"type": "error", "message": f"答案生成失败: {e}"}
                 return
 
-            answer = sanitize_output("".join(parts))
+            answer = self.guards.inspect("".join(parts), ANSWER_CTX).text
             confidence = compute_confidence(answer, chunks)
 
             if use_cache and answer.strip():
@@ -244,3 +249,13 @@ class ChatService:
                 "cached": False,
                 "query_decomposed": query_decomposed,
             }
+
+    def _inspect_documents(self, chunks) -> None:
+        """检索文档正文注入扫描（**仅告警，不干预答案** —— 评审已决 2026-09-17）。
+
+        RAG 里真正的注入通道是检索回来的文档正文：模式命中只记 warning，
+        答案照常生成（可用性优先）。与 gateway 内那处扫描同一个护栏配置。
+        """
+        texts = [getattr(chunk, "text", "") or "" for chunk in chunks or []]
+        if any(texts):
+            self.guards.inspect_many(texts, DOCUMENT_CTX)
