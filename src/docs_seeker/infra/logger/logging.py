@@ -59,10 +59,14 @@ class _JSONFileSink:
         self._file.flush()
 
 
-def setup_logging(level: str = "INFO") -> None:
+def setup_logging(level: str = "INFO", log_dir: Path | str = "logs") -> None:
     """配置全局 logger：
     - stderr: 彩色格式（开发时实时查看）
     - logs/docs-seeker-YYYY-MM-DD.log: JSON 格式按日轮换
+
+    ⚠️ 文件 sink 建不起来（典型：``read_only: true`` 的容器里 mkdir 只读文件系统失败）
+    **不得让应用启动失败** —— 降级为仅 stderr，并打一条 warning。
+    只读部署请把可写 tmpfs/卷挂到 ``log_dir`` 上（见 docker-compose.prod.yml）。
     """
     logger.remove()
 
@@ -78,9 +82,14 @@ def setup_logging(level: str = "INFO") -> None:
         diagnose=False,
     )
 
-    # logs/ — JSON 按日轮换
+    # logs/ — JSON 按日轮换（失败降级为仅 stderr，绝不拖垮启动）
+    try:
+        file_sink = _JSONFileSink(Path(log_dir))
+    except OSError as e:
+        logger.warning(f"JSON 文件日志不可用（{e}）→ 降级为仅 stderr；只读部署请挂可写卷到 {log_dir}")
+        return
     logger.add(
-        _JSONFileSink(Path("logs")),
+        file_sink,
         level=level,
         backtrace=True,
         diagnose=False,

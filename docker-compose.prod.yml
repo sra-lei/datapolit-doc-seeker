@@ -81,6 +81,10 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=128m,mode=1777
+      # 应用按日写 JSON 日志到 ./logs（WORKDIR=/app）。根文件系统只读，
+      # 必须给这一块可写空间：否则 setup_logging 里 mkdir 失败 → 启动即崩
+      # 并进入无限重启（2026-09-17 事故）。
+      - /app/logs:size=32m,mode=1777
     security_opt:
       - no-new-privileges:true
     cap_drop:
