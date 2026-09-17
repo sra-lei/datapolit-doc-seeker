@@ -72,9 +72,14 @@ class Settings(BaseSettings):
     llm_judge_timeout_seconds: float = 20.0
     # Transport middleware 链（逗号分隔，顺序 = 外层到内层；空 = 默认链）。
     # 可选：observability（观测参数）/ fallback（主备降级）/
-    #       circuit_breaker（熔断）/ retry（退避重试）。
+    #       circuit_breaker（熔断）/ budget_guard（截断预算兜底）/ retry（退避重试）。
     # 例：LLM_TRANSPORT_MIDDLEWARES=observability,retry 可临时关掉降级与熔断。
     llm_transport_middlewares: str = ""
+    # 熔断阈值（连续失败多少次打开熔断）与冷却时长（秒，冷却后半开试探一次）。
+    # ⚠️ 未配 FALLBACK_* 时，熔断打开期间请求会直接失败（不再打后端），
+    # 这是熔断的预期行为；若希望故障期继续对外服务，请配备用 provider。
+    llm_circuit_failure_threshold: int = 5
+    llm_circuit_recovery_seconds: int = 60
 
     # 采样温度。0 = 确定性输出（**评估与 A/B 必须用 0**：同代码同语料下单轮
     # 22 题的分数摆幅曾达 0.75，噪声大于待测改动的量级）；>0 = 保留多样性。

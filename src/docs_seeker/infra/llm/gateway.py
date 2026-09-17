@@ -63,7 +63,10 @@ class LLMGateway(LLMProvider):
         if fk and fu:
             self.fallback_client = OpenAI(api_key=fk, base_url=fu)
         self.fallback_model = os.getenv("FALLBACK_MODEL", "deepseek-chat")
-        self.circuit_breaker = CircuitBreaker()
+        self.circuit_breaker = CircuitBreaker(
+            failure_threshold=settings.llm_circuit_failure_threshold,
+            recovery_timeout=settings.llm_circuit_recovery_seconds,
+        )
         self.total_calls = 0
         self.success_calls = 0
         self.fallback_calls = 0

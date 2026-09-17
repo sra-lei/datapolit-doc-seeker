@@ -177,6 +177,17 @@ def test_fallback_switches_provider_and_marks_envelope(install_multi, monkeypatc
 
 
 # ------------------------------------------------------------------ #
+#  熔断参数配置化
+# ------------------------------------------------------------------ #
+def test_circuit_breaker_params_come_from_settings(install, monkeypatch) -> None:
+    monkeypatch.setattr(settings, "llm_circuit_failure_threshold", 9)
+    monkeypatch.setattr(settings, "llm_circuit_recovery_seconds", 120)
+    gw = gateway_module.LLMGateway()
+    assert gw.circuit_breaker.failure_threshold == 9
+    assert gw.circuit_breaker.recovery_timeout == 120
+
+
+# ------------------------------------------------------------------ #
 #  可插拔
 # ------------------------------------------------------------------ #
 def test_default_chain_order(install) -> None:
