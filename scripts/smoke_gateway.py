@@ -35,11 +35,11 @@ BUDGET = 2000
 
 
 def main() -> int:
-    gw = LLMClient()
+    client = LLMClient()
     failures: list[str] = []
 
     # 1. 普通调用
-    resp = gw.generate(LLMRequest(messages=PROMPT, max_tokens=BUDGET, temperature=0.0, name="smoke-basic"))
+    resp = client.generate(LLMRequest(messages=PROMPT, max_tokens=BUDGET, temperature=0.0, name="smoke-basic"))
     print(f"[1] text={resp.text!r} finish={resp.finish_reason} usage={resp.usage}")
     print(
         f"    provider={resp.provider} fallback={resp.fallback_used} attempts={resp.attempts} raw={'有' if resp.raw is not None else '无'}"
@@ -52,7 +52,7 @@ def main() -> int:
         failures.append("普通调用 usage 未提取")
 
     # 2. 参数透传（真实 API 接受 extra 参数）
-    resp2 = gw.generate(
+    resp2 = client.generate(
         LLMRequest(
             messages=PROMPT,
             max_tokens=BUDGET,
@@ -64,7 +64,7 @@ def main() -> int:
     print(f"[2] extra 透传 text={resp2.text!r} finish={resp2.finish_reason}")
 
     # 3. 流式：只透传 + iter_text 聚合
-    resp3 = gw.generate(
+    resp3 = client.generate(
         LLMRequest(messages=PROMPT, max_tokens=BUDGET, temperature=0.0, name="smoke-stream", stream=True)
     )
     deltas = list(resp3.iter_text())
@@ -77,15 +77,15 @@ def main() -> int:
     # 4. 预算兜底：小预算 → 空正文 + length → middleware 放大预算重试一次
     #    用「SDK 实际调用序列」判定（只看正文会歧义：小预算也可能碰巧吐出正文）
     sdk_calls: list = []
-    _real_create = gw.primary_client.chat.completions.create
+    _real_create = client.primary_client.chat.completions.create
 
     def _counting_create(**kwargs):
         sdk_calls.append(kwargs.get("max_tokens"))
         return _real_create(**kwargs)
 
-    gw.primary_client.chat.completions.create = _counting_create
+    client.primary_client.chat.completions.create = _counting_create
     small = 16
-    resp4 = gw.generate(
+    resp4 = client.generate(
         LLMRequest(
             messages=PROMPT,
             max_tokens=small,

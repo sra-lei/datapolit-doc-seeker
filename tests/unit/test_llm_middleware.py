@@ -63,7 +63,7 @@ class _FakeOpenAI:
 
 @pytest.fixture
 def install(monkeypatch):
-    """安装假客户端；返回 (sink, 构造网关的工厂)"""
+    """安装假客户端；返回 (sink, 构造客户端的工厂)"""
     sink: list[dict] = []
     monkeypatch.setattr(client_module.time, "sleep", lambda _s: None)  # 跳过退避等待
     monkeypatch.setattr(client_module, "OpenAI", lambda **kwargs: _FakeOpenAI(sink))
@@ -91,9 +91,9 @@ def install_multi(monkeypatch):
 #  重试
 # ------------------------------------------------------------------ #
 def test_retry_succeeds_after_transient_failures(install) -> None:
-    gw = client_module.LLMClient()
-    gw.primary_client.fail_times = 2
-    resp = gw.generate(PROMPT)
+    client = client_module.LLMClient()
+    client.primary_client.fail_times = 2
+    resp = client.generate(PROMPT)
     assert resp.text == "ok"
     assert resp.attempts == 3
     assert len(install) == 3
@@ -105,11 +105,11 @@ def test_non_retryable_error_fails_fast(install, monkeypatch) -> None:
     monkeypatch.delenv("FALLBACK_BASE_URL", raising=False)
     sink = install
     sink.clear()
-    gw = client_module.LLMClient()
-    gw.primary_client.fail_times = 99
-    gw.primary_client._error_factory = _AuthError
+    client = client_module.LLMClient()
+    client.primary_client.fail_times = 99
+    client.primary_client._error_factory = _AuthError
     with pytest.raises(AllModelsFailedError):
-        gw.generate(PROMPT)
+        client.generate(PROMPT)
     assert len(sink) == 1  # 没有重试
 
 
@@ -121,18 +121,18 @@ def test_circuit_breaker_opens_and_fails_fast(install, monkeypatch) -> None:
     monkeypatch.delenv("FALLBACK_BASE_URL", raising=False)
     sink = install
     sink.clear()
-    gw = client_module.LLMClient()
-    gw.circuit_breaker.failure_threshold = 2
-    gw.primary_client.fail_times = 99
+    client = client_module.LLMClient()
+    client.circuit_breaker.failure_threshold = 2
+    client.primary_client.fail_times = 99
 
     for _ in range(2):  # 两次逻辑调用（内部各重试 4 次）
         with pytest.raises(AllModelsFailedError):
-            gw.generate(PROMPT)
-    assert gw.circuit_breaker.state is CircuitState.OPEN
+            client.generate(PROMPT)
+    assert client.circuit_breaker.state is CircuitState.OPEN
     calls_before = len(sink)
 
     with pytest.raises(AllModelsFailedError):
-        gw.generate(PROMPT)
+        client.generate(PROMPT)
     assert len(sink) == calls_before  # 熔断打开：直接拒绝，没有再打 SDK
 
 
@@ -141,20 +141,20 @@ def test_circuit_breaker_half_open_recovers(install, monkeypatch) -> None:
     monkeypatch.delenv("FALLBACK_BASE_URL", raising=False)
     sink = install
     sink.clear()
-    gw = client_module.LLMClient()
-    gw.circuit_breaker.failure_threshold = 1
-    gw.primary_client.fail_times = 99
+    client = client_module.LLMClient()
+    client.circuit_breaker.failure_threshold = 1
+    client.primary_client.fail_times = 99
     with pytest.raises(AllModelsFailedError):
-        gw.generate(PROMPT)
-    assert gw.circuit_breaker.state is CircuitState.OPEN
+        client.generate(PROMPT)
+    assert client.circuit_breaker.state is CircuitState.OPEN
 
     # 冷却期已过 + 服务恢复 → 半开试探成功 → 关闭
-    gw.circuit_breaker.last_failure_time = 0
-    gw.primary_client.fail_times = 0
-    resp = gw.generate(PROMPT)
+    client.circuit_breaker.last_failure_time = 0
+    client.primary_client.fail_times = 0
+    resp = client.generate(PROMPT)
     assert resp.text == "ok"
-    assert gw.circuit_breaker.state is CircuitState.CLOSED
-    assert gw.circuit_breaker.failure_count == 0
+    assert client.circuit_breaker.state is CircuitState.CLOSED
+    assert client.circuit_breaker.failure_count == 0
 
 
 # ------------------------------------------------------------------ #
@@ -165,15 +165,15 @@ def test_fallback_switches_provider_and_marks_envelope(install_multi, monkeypatc
     monkeypatch.setenv("FALLBACK_BASE_URL", "https://fallback.example/v1")
     monkeypatch.setenv("FALLBACK_MODEL", "fallback-model")
     sink, clients = install_multi
-    gw = client_module.LLMClient()
+    client = client_module.LLMClient()
 
-    resp = gw.generate(PROMPT)
+    resp = client.generate(PROMPT)
 
     assert resp.provider == "fallback"
     assert resp.fallback_used is True
     assert sink[-1]["model"] == "fallback-model"  # 降级用备用模型
-    assert gw.stats["fallback_calls"] == 1
-    assert gw.stats["success_calls"] == 0  # 主模型没成功过
+    assert client.stats["fallback_calls"] == 1
+    assert client.stats["success_calls"] == 0  # 主模型没成功过
 
 
 # ------------------------------------------------------------------ #
@@ -182,19 +182,19 @@ def test_fallback_switches_provider_and_marks_envelope(install_multi, monkeypatc
 def test_circuit_breaker_params_come_from_settings(install, monkeypatch) -> None:
     monkeypatch.setattr(settings, "llm_circuit_failure_threshold", 9)
     monkeypatch.setattr(settings, "llm_circuit_recovery_seconds", 120)
-    gw = client_module.LLMClient()
-    assert gw.circuit_breaker.failure_threshold == 9
-    assert gw.circuit_breaker.recovery_timeout == 120
+    client = client_module.LLMClient()
+    assert client.circuit_breaker.failure_threshold == 9
+    assert client.circuit_breaker.recovery_timeout == 120
 
 
 # ------------------------------------------------------------------ #
 #  可插拔
 # ------------------------------------------------------------------ #
 def test_default_chain_order(install) -> None:
-    gw = client_module.LLMClient()
+    client = client_module.LLMClient()
     expected = ["guard", "observability", "fallback", "circuit_breaker", "budget_guard", "retry"]
-    assert [m.name for m in gw.middlewares] == expected
-    resp = gw.generate(PROMPT)
+    assert [m.name for m in client.middlewares] == expected
+    resp = client.generate(PROMPT)
     assert resp.applied_middlewares == expected
 
 
@@ -203,26 +203,26 @@ def test_chain_can_be_trimmed_by_settings(install, monkeypatch) -> None:
     monkeypatch.setattr(settings, "llm_transport_middlewares", "observability")
     sink = install
     sink.clear()
-    gw = client_module.LLMClient()
-    assert [m.name for m in gw.middlewares] == ["observability"]
+    client = client_module.LLMClient()
+    assert [m.name for m in client.middlewares] == ["observability"]
 
-    gw.primary_client.fail_times = 99
+    client.primary_client.fail_times = 99
     with pytest.raises(TimeoutError):  # 无 retry / fallback：原始错误直接冒泡
-        gw.generate(PROMPT)
+        client.generate(PROMPT)
     assert len(sink) == 1
 
 
 def test_middlewares_can_be_injected_explicitly(install) -> None:
     from docs_seeker.infra.llm.middleware import ObservabilityMiddleware
 
-    gw = client_module.LLMClient(middlewares=[ObservabilityMiddleware()])
-    assert [m.name for m in gw.middlewares] == ["observability"]
+    client = client_module.LLMClient(middlewares=[ObservabilityMiddleware()])
+    assert [m.name for m in client.middlewares] == ["observability"]
 
 
 def test_observability_injects_stream_options_only_when_streaming(install) -> None:
-    gw = client_module.LLMClient()
-    gw.generate(PROMPT)
+    client = client_module.LLMClient()
+    client.generate(PROMPT)
     assert "stream_options" not in install[-1]
 
-    gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], stream=True))
+    client.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], stream=True))
     assert install[-1]["stream_options"] == {"include_usage": True}

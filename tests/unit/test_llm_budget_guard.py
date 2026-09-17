@@ -10,7 +10,7 @@
 
 Phase 2 变更：放大预算重试的机制从 Generator / QueryDecomposer 各自的副本收编到
 transport 的 ``BudgetGuardMiddleware``（按请求 `meta["budget_guard"]` 启用）。因此
-本文件里凡涉及兜底的用例都走**真实网关 + 假 OpenAI 客户端**（而不是裸的假 LLM），
+本文件里凡涉及兜底的用例都走**真实客户端 + 假 OpenAI 客户端**（而不是裸的假 LLM），
 否则测不到 middleware；断言口径（调用次数与预算序列）与收编前完全一致。
 
 不依赖真实 LLM / Milvus / Redis。
@@ -34,10 +34,10 @@ _EMPTY_TRUNCATED = ("", "length")  # 推理吃满预算：正文空 + 截断
 _EMPTY_STOPPED = ("", "stop")  # 真的没内容（非截断）
 
 
-def _scripted_gateway(monkeypatch, script: list[tuple[str, str]]):
-    """构造带完整 middleware 链的网关；假客户端按 script 依次返回 (正文, finish_reason)。
+def _scripted_client(monkeypatch, script: list[tuple[str, str]]):
+    """构造带完整 middleware 链的客户端；假客户端按 script 依次返回 (正文, finish_reason)。
 
-    返回 (网关, 调用参数 sink)。``script`` 用完后重复最后一项。
+    返回 (客户端, 调用参数 sink)。``script`` 用完后重复最后一项。
     """
     sink: list[dict] = []
 
@@ -76,34 +76,34 @@ def _docs(n: int = 3) -> list[Chunk]:
 # ------------------------------------------------------------------ #
 class TestGeneratorBudgetGuard:
     def test_truncated_empty_retries_with_boosted_budget(self, monkeypatch) -> None:
-        gw, sink = _scripted_gateway(monkeypatch, [_EMPTY_TRUNCATED, ("这是答案", "stop")])
-        answer, confidence = Generator(llm=gw).generate("问题", _docs())
+        client, sink = _scripted_client(monkeypatch, [_EMPTY_TRUNCATED, ("这是答案", "stop")])
+        answer, confidence = Generator(llm=client).generate("问题", _docs())
         assert answer == "这是答案"
         assert _budgets(sink) == [settings.llm_generate_max_tokens, settings.llm_retry_max_tokens]
         assert confidence != "low"
 
     def test_persistent_empty_returns_empty_low_confidence(self, monkeypatch) -> None:
-        gw, sink = _scripted_gateway(monkeypatch, [_EMPTY_TRUNCATED])
-        answer, confidence = Generator(llm=gw).generate("问题", _docs())
+        client, sink = _scripted_client(monkeypatch, [_EMPTY_TRUNCATED])
+        answer, confidence = Generator(llm=client).generate("问题", _docs())
         assert answer == ""
         assert confidence == "low"
         assert len(sink) == 2  # 只重试一次，不做无界重试
 
     def test_empty_without_truncation_does_not_retry(self, monkeypatch) -> None:
-        gw, sink = _scripted_gateway(monkeypatch, [_EMPTY_STOPPED])
-        answer, confidence = Generator(llm=gw).generate("问题", _docs())
+        client, sink = _scripted_client(monkeypatch, [_EMPTY_STOPPED])
+        answer, confidence = Generator(llm=client).generate("问题", _docs())
         assert answer == "" and confidence == "low"
         assert _budgets(sink) == [settings.llm_generate_max_tokens]
 
     def test_explicit_max_tokens_keeps_single_call(self, monkeypatch) -> None:
         """显式预算沿用旧口径（不放大重试），供测试/特殊调用方使用。"""
-        gw, sink = _scripted_gateway(monkeypatch, [("答案", "stop")])
-        Generator(llm=gw).generate("问题", _docs(), max_tokens=123)
+        client, sink = _scripted_client(monkeypatch, [("答案", "stop")])
+        Generator(llm=client).generate("问题", _docs(), max_tokens=123)
         assert _budgets(sink) == [123]
 
     def test_stream_uses_configured_budget(self, monkeypatch) -> None:
-        gw, sink = _scripted_gateway(monkeypatch, [("片段", "stop")])
-        assert list(Generator(llm=gw).generate_stream("问题", _docs())) == ["片段"]
+        client, sink = _scripted_client(monkeypatch, [("片段", "stop")])
+        assert list(Generator(llm=client).generate_stream("问题", _docs())) == ["片段"]
         assert _budgets(sink) == [settings.llm_generate_max_tokens]
         assert sink[0]["stream"] is True
 
@@ -117,20 +117,20 @@ class TestGeneratorBudgetGuard:
 # ------------------------------------------------------------------ #
 class TestQueryDecomposerBudgetGuard:
     def test_empty_then_retry_success(self, monkeypatch) -> None:
-        gw, sink = _scripted_gateway(monkeypatch, [_EMPTY_TRUNCATED, ("子问题A\n子问题B", "stop")])
-        query = QueryDecomposer(llm=gw).decompose("原问题")
+        client, sink = _scripted_client(monkeypatch, [_EMPTY_TRUNCATED, ("子问题A\n子问题B", "stop")])
+        query = QueryDecomposer(llm=client).decompose("原问题")
         assert query.sub_queries == ["原问题", "子问题A", "子问题B"]
         assert _budgets(sink) == [settings.llm_decompose_max_tokens, settings.llm_retry_max_tokens]
 
     def test_persistent_empty_falls_back_to_original_question(self, monkeypatch) -> None:
-        gw, sink = _scripted_gateway(monkeypatch, [_EMPTY_TRUNCATED])
-        query = QueryDecomposer(llm=gw).decompose("原问题")
+        client, sink = _scripted_client(monkeypatch, [_EMPTY_TRUNCATED])
+        query = QueryDecomposer(llm=client).decompose("原问题")
         assert query.sub_queries == ["原问题"]
         assert len(sink) == 2
 
     def test_simple_question_returns_single_sub_query(self, monkeypatch) -> None:
-        gw, sink = _scripted_gateway(monkeypatch, [("原问题", "stop")])
-        query = QueryDecomposer(llm=gw).decompose("原问题")
+        client, sink = _scripted_client(monkeypatch, [("原问题", "stop")])
+        query = QueryDecomposer(llm=client).decompose("原问题")
         assert query.sub_queries == ["原问题"]
         assert _budgets(sink) == [settings.llm_decompose_max_tokens]
 
@@ -140,15 +140,15 @@ class TestQueryDecomposerBudgetGuard:
 # ------------------------------------------------------------------ #
 class TestBudgetGuardOptIn:
     def test_without_flag_no_boost(self, monkeypatch) -> None:
-        gw, sink = _scripted_gateway(monkeypatch, [_EMPTY_TRUNCATED, ("不该被调用", "stop")])
-        resp = gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], max_tokens=100))
+        client, sink = _scripted_client(monkeypatch, [_EMPTY_TRUNCATED, ("不该被调用", "stop")])
+        resp = client.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], max_tokens=100))
         assert resp.text == ""
         assert _budgets(sink) == [100]
 
     def test_boost_skipped_when_retry_budget_not_larger(self, monkeypatch) -> None:
         monkeypatch.setattr(settings, "llm_retry_max_tokens", 100)
-        gw, sink = _scripted_gateway(monkeypatch, [_EMPTY_TRUNCATED, ("不该被调用", "stop")])
-        resp = gw.generate(
+        client, sink = _scripted_client(monkeypatch, [_EMPTY_TRUNCATED, ("不该被调用", "stop")])
+        resp = client.generate(
             LLMRequest(messages=[{"role": "user", "content": "x"}], max_tokens=100, meta={"budget_guard": True})
         )
         assert resp.text == ""

@@ -48,7 +48,7 @@ def get_hybrid_router() -> HybridRouter:
 
 
 def get_agent_runner() -> AgentRunner:
-    """Agentic M1：复用单例 LLM 网关与混合检索器（含同一份 BM25 索引）。"""
+    """Agentic M1：复用单例 LLM 客户端与混合检索器（含同一份 BM25 索引）。"""
     global _agent_runner
     if _agent_runner is None:
         _agent_runner = AgentRunner(
@@ -62,7 +62,7 @@ def get_chat_service() -> ChatService:
     global _chat_service
     if _chat_service is None:
         # 所有依赖显式组装：检索/预热/问答共用同一份 CompositeRetriever
-        # （进而共用同一份 BM25 索引），LLM 网关与语义缓存亦为进程内单例
+        # （进而共用同一份 BM25 索引），LLM 客户端与语义缓存亦为进程内单例
         _chat_service = ChatService(
             retriever=get_composite_retriever(),
             generator=get_generator(),

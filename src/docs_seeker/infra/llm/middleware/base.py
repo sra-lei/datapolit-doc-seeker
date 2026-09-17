@@ -5,7 +5,7 @@
     observability → fallback → circuit_breaker → retry → [terminal: 组 payload + 调 SDK + 包信封]
 
 每个 middleware 拿到 ``call_next``，**自行决定**调用几次、要不要换 provider、要不要
-短路返回 —— 重试 / 熔断 / 降级 / 观测因此都可以插拔替换，网关只剩「组 payload →
+短路返回 —— 重试 / 熔断 / 降级 / 观测因此都可以插拔替换，客户端只剩「组 payload →
 调 SDK → 包信封」这一件事。
 
 约定：

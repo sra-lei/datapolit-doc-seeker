@@ -3,7 +3,7 @@
 状态机：CLOSED --(连续失败到阈值)--> OPEN --(冷却超时)--> HALF_OPEN
         HALF_OPEN --(试探成功)--> CLOSED / --(试探失败)--> OPEN
 
-⚠️ 历史缺陷修复（Phase 1）：旧实现里网关只在成功时把 ``failure_count`` 重置为 0，
+⚠️ 历史缺陷修复（Phase 1）：旧实现里客户端只在成功时把 ``failure_count`` 重置为 0，
 **从未累加过**、``state`` 也从未置 OPEN —— 熔断器实际上永不打开（死代码）。
 Phase 1 拆 middleware 时接上真正的状态机。
 """

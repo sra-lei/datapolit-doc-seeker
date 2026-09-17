@@ -32,7 +32,7 @@ def main() -> int:
     ap.add_argument("--top-k", type=int, default=10)
     args = ap.parse_args()
 
-    gw = get_llm_client()
+    client = get_llm_client()
     retriever = _retriever()
 
     llm_calls: list[dict] = []
@@ -43,7 +43,7 @@ def main() -> int:
     retriever.search("预热", top_k=1)
     print(f"预热（首次检索，含 BM25 建索引）：{time.time() - t0:.1f}s —— 不计入对照\n")
 
-    original_generate = gw.generate
+    original_generate = client.generate
 
     def timed_generate(request: LLMRequest):
         t = time.time()
@@ -69,7 +69,7 @@ def main() -> int:
         finally:
             search_calls.append(round(time.time() - t, 2))
 
-    gw.generate = timed_generate
+    client.generate = timed_generate
     retriever.search = timed_search  # ⚠️ 别只定义不挂：上一版就是漏了这行，检索耗时全被算成「其余」
 
     def _reset() -> None:
@@ -96,8 +96,8 @@ def main() -> int:
     _reset()
     pipeline = RAGPipeline(
         retriever=retriever,
-        decomposer=QueryDecomposer(llm=gw),
-        generator=Generator(llm=gw),
+        decomposer=QueryDecomposer(llm=client),
+        generator=Generator(llm=client),
     )
     t0 = time.time()
     _answer, _conf, _chunks, sub_questions = pipeline.run(args.question, top_k=args.top_k)
@@ -108,7 +108,7 @@ def main() -> int:
     from docs_seeker.agent.runner import AgentRunner
 
     _reset()
-    runner = AgentRunner(llm=gw, retriever=retriever)
+    runner = AgentRunner(llm=client, retriever=retriever)
     t0 = time.time()
     result = runner.run(args.question, top_k=args.top_k)
     agent_total = time.time() - t0

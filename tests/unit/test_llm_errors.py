@@ -61,7 +61,7 @@ def no_fallback(monkeypatch):
     monkeypatch.setattr(client_module.time, "sleep", lambda _s: None)
 
 
-def _primary_only_gateway(monkeypatch, error_factory=None) -> client_module.LLMClient:
+def _primary_only_client(monkeypatch, error_factory=None) -> client_module.LLMClient:
     sink: list[dict] = []
     monkeypatch.setattr(
         client_module, "OpenAI", lambda **kwargs: _FakeOpenAI(sink, fail_times=99, error_factory=error_factory)
@@ -73,9 +73,9 @@ def _primary_only_gateway(monkeypatch, error_factory=None) -> client_module.LLMC
 #  主模型失败（无备用）
 # ------------------------------------------------------------------ #
 def test_primary_only_failure_is_attributable(no_fallback, monkeypatch) -> None:
-    gw = _primary_only_gateway(monkeypatch)
+    client = _primary_only_client(monkeypatch)
     with pytest.raises(AllModelsFailedError) as excinfo:
-        gw.generate(PROMPT)
+        client.generate(PROMPT)
 
     err = excinfo.value
     assert isinstance(err, LLMError)
@@ -88,16 +88,16 @@ def test_primary_only_failure_is_attributable(no_fallback, monkeypatch) -> None:
 
 def test_error_chain_is_preserved(no_fallback, monkeypatch) -> None:
     """底层原始异常必须能被追踪到（历史实现曾用 `raise ... from None` 抹掉）"""
-    gw = _primary_only_gateway(monkeypatch)
+    client = _primary_only_client(monkeypatch)
     with pytest.raises(AllModelsFailedError) as excinfo:
-        gw.generate(PROMPT)
+        client.generate(PROMPT)
     assert isinstance(excinfo.value.__cause__, TimeoutError)
 
 
 def test_message_carries_provider_detail(no_fallback, monkeypatch) -> None:
-    gw = _primary_only_gateway(monkeypatch)
+    client = _primary_only_client(monkeypatch)
     with pytest.raises(AllModelsFailedError) as excinfo:
-        gw.generate(PROMPT)
+        client.generate(PROMPT)
     text = str(excinfo.value)
     assert "primary" in text and "TimeoutError" in text
 
@@ -106,9 +106,9 @@ def test_message_carries_provider_detail(no_fallback, monkeypatch) -> None:
 #  不可重试错误
 # ------------------------------------------------------------------ #
 def test_non_retryable_failure_is_marked(no_fallback, monkeypatch) -> None:
-    gw = _primary_only_gateway(monkeypatch, error_factory=_AuthError)
+    client = _primary_only_client(monkeypatch, error_factory=_AuthError)
     with pytest.raises(AllModelsFailedError) as excinfo:
-        gw.generate(PROMPT)
+        client.generate(PROMPT)
     err = excinfo.value
     assert err.retryable is False
     assert err.attempts == 1  # 鉴权错误不重试
@@ -128,9 +128,9 @@ def test_both_providers_failure_lists_both_errors(monkeypatch) -> None:
         return _FakeOpenAI(sink, fail_times=99)  # 主、备都永远失败
 
     monkeypatch.setattr(client_module, "OpenAI", factory)
-    gw = client_module.LLMClient()
+    client = client_module.LLMClient()
     with pytest.raises(AllModelsFailedError) as excinfo:
-        gw.generate(PROMPT)
+        client.generate(PROMPT)
 
     err = excinfo.value
     providers = [name for name, _ in err.provider_errors]
@@ -141,13 +141,13 @@ def test_both_providers_failure_lists_both_errors(monkeypatch) -> None:
 
 
 def test_open_circuit_without_fallback_is_marked(no_fallback, monkeypatch) -> None:
-    gw = _primary_only_gateway(monkeypatch)
-    gw.circuit_breaker.failure_threshold = 1
+    client = _primary_only_client(monkeypatch)
+    client.circuit_breaker.failure_threshold = 1
     with pytest.raises(AllModelsFailedError):
-        gw.generate(PROMPT)  # 先把熔断器打开
+        client.generate(PROMPT)  # 先把熔断器打开
 
     with pytest.raises(AllModelsFailedError) as excinfo:
-        gw.generate(PROMPT)
+        client.generate(PROMPT)
     err = excinfo.value
     assert err.retryable is False
     assert "熔断" in str(err)

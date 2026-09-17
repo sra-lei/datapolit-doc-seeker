@@ -3,7 +3,7 @@
 方案：``docs/llm-gateway-guard-refactor.md`` §2.4 / §3。锁定的契约：
 
 1. **边界挂载**（pipeline boundary）：用户输入命中 → 可拒答；最终答案 → 可改写（脱敏）；
-2. **gateway 内挂载**：送 provider 的 messages 命中 → **只告警、不短路**（agent 循环内
+2. **client 内挂载**：送 provider 的 messages 命中 → **只告警、不短路**（agent 循环内
    每次 LLM 调用也经过护栏）；
 3. **检索文档正文**命中 → **只告警、答案不变**（换语料后补上的缺口：RAG 里真正的注入
    通道是检索回来的文档）；
@@ -192,7 +192,7 @@ class TestChatServiceBoundary:
 
 
 # ------------------------------------------------------------------ #
-#  gateway 内挂载：agent 内部调用也过护栏（只告警）
+#  client 内挂载：agent 内部调用也过护栏（只告警）
 # ------------------------------------------------------------------ #
 def _fake_openai(monkeypatch):
     def factory(**kwargs):
@@ -214,18 +214,18 @@ def _fake_openai(monkeypatch):
 
 class TestGatewayInnerMount:
     def test_messages_with_injection_are_logged_not_blocked(self, monkeypatch, captured_logs) -> None:
-        gw = _fake_openai(monkeypatch)
-        resp = gw.generate(LLMRequest(messages=[{"role": "user", "content": INJECTION_TEXT}], max_tokens=10))
+        client = _fake_openai(monkeypatch)
+        resp = client.generate(LLMRequest(messages=[{"role": "user", "content": INJECTION_TEXT}], max_tokens=10))
         assert resp.text == "ok"  # 不短路：答案照常返回
         assert any("injection_guard" in line for line in captured_logs)
 
     def test_system_messages_are_not_scanned(self, monkeypatch, captured_logs) -> None:
         """system prompt 是我们自己写的，扫它只会制造误报"""
-        gw = _fake_openai(monkeypatch)
-        gw.generate(LLMRequest(messages=[{"role": "system", "content": INJECTION_TEXT}], max_tokens=10))
+        client = _fake_openai(monkeypatch)
+        client.generate(LLMRequest(messages=[{"role": "system", "content": INJECTION_TEXT}], max_tokens=10))
         assert not any("injection_guard" in line for line in captured_logs)
 
     def test_guard_is_in_applied_middlewares(self, monkeypatch) -> None:
-        gw = _fake_openai(monkeypatch)
-        resp = gw.generate(LLMRequest(messages=[{"role": "user", "content": "普通问题"}], max_tokens=10))
+        client = _fake_openai(monkeypatch)
+        resp = client.generate(LLMRequest(messages=[{"role": "user", "content": "普通问题"}], max_tokens=10))
         assert "guard" in resp.applied_middlewares

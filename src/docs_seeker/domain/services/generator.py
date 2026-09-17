@@ -47,7 +47,7 @@ class Generator:
         timeout: float | None = None,
         budget_guard: bool = False,
     ) -> LLMResponse:
-        """单次调用 LLM 网关，返回 ``LLMResponse`` 信封。
+        """单次调用 LLM 客户端，返回 ``LLMResponse`` 信封。
 
         温度取自 ``LLM_TEMPERATURE``（默认 0.3 = 历史口径；评估/A-B 用 0，
         否则采样噪声会盖过待测改动的量级）；模型可取 ``LLM_GENERATE_MODEL``
@@ -107,7 +107,7 @@ class Generator:
 
         显式传入 ``max_tokens`` 时沿用旧口径（单次调用、不做放大重试），供测试
         与特殊调用方使用；不传则走 ``LLM_GENERATE_MAX_TOKENS`` + 预算兜底。
-        ``timeout`` 非空时透传网关覆盖全局超时（agent 循环内判断类调用传
+        ``timeout`` 非空时透传客户端覆盖全局超时（agent 循环内判断类调用传
         ``LLM_JUDGE_TIMEOUT_SECONDS``，宁可快速失败走回退也不要卡住循环）。
         """
         messages = self._build_messages(question, docs, conversation_history)

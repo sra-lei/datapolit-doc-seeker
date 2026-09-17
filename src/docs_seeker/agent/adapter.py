@@ -1,4 +1,4 @@
-"""把网关返回的 ``LLMResponse`` 映射为中立的 LLMMessage。
+"""把客户端返回的 ``LLMResponse`` 映射为中立的 LLMMessage。
 
 vendor 字段（DeepSeek reasoning_content、native tool_calls）在
 ``LLMResponse.from_raw`` 已隔离，这里只做「信封 → LLMMessage」的形状转换，

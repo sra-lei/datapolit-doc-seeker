@@ -21,7 +21,7 @@ class QueryDecomposer:
     """查询分解器：用 LLM 将复杂问题拆分为多个子问题"""
 
     def __init__(self, llm: LLMProvider | None = None):
-        # 允许注入 LLM（deps 组装点传入）；缺省时走全局网关单例
+        # 允许注入 LLM（deps 组装点传入）；缺省时走全局客户端单例
         self.llm = llm or get_llm_client()
 
     def _call(self, prompt: str, max_tokens: int, name: str, budget_guard: bool = False):

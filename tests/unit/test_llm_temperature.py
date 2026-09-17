@@ -57,14 +57,14 @@ def test_generator_temperature_comes_from_settings():
     assert llm.calls[0]["temperature"] == settings.llm_temperature
 
 
-def test_generator_temperature_zero_reaches_gateway():
+def test_generator_temperature_zero_reaches_client():
     llm = RecordingLLM()
     with patch.object(settings, "llm_temperature", 0.0):
         Generator(llm=llm).generate("问题", [Chunk(id="c1", text="正文")])
     assert llm.calls[0]["temperature"] == 0.0
 
 
-def test_decomposer_temperature_zero_reaches_gateway():
+def test_decomposer_temperature_zero_reaches_client():
     llm = RecordingLLM(content="子问题一\n子问题二")
     with patch.object(settings, "llm_decompose_temperature", 0.0):
         QueryDecomposer(llm=llm).decompose("问题")

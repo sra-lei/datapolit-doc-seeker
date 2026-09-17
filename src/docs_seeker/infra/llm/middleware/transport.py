@@ -42,7 +42,7 @@ class ObservabilityMiddleware:
     """观测参数注入：流式时开启 usage 上报（Langfuse 才能记账 token 与成本）。
 
     只处理**真实的 provider 参数** ``stream_options``（走 ``request.extra``）；
-    langfuse drop-in 专属的 ``name`` kwarg 由网关终端注入（只有构造 client 的那层
+    langfuse drop-in 专属的 ``name`` kwarg 由客户端终端注入（只有构造 client 的那层
     知道它是不是 langfuse 包装）。
     """
 

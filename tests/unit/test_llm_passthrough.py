@@ -1,4 +1,4 @@
-"""LLM 网关参数透传与返回保真（重构 Phase 0）。
+"""LLM 客户端参数透传与返回保真（重构 Phase 0）。
 
 方案：``docs/llm-gateway-guard-refactor.md``。本文件锁定三条契约：
 
@@ -53,8 +53,8 @@ class _FakeOpenAI:
         self.chat = SimpleNamespace(completions=_Completions())
 
 
-def _gateway(monkeypatch, *, fail_times: int = 0, raw_factory=None) -> tuple[list[dict], client_module.LLMClient]:
-    """构造接了假 OpenAI 客户端的网关；返回 (调用参数 sink, 网关)"""
+def _client(monkeypatch, *, fail_times: int = 0, raw_factory=None) -> tuple[list[dict], client_module.LLMClient]:
+    """构造接假 OpenAI 的客户端；返回 (调用参数 sink, 客户端)"""
     sink: list[dict] = []
     monkeypatch.setattr(client_module, "OpenAI", lambda **kwargs: _FakeOpenAI(sink, fail_times, raw_factory))
     return sink, client_module.LLMClient()
@@ -64,8 +64,8 @@ def _gateway(monkeypatch, *, fail_times: int = 0, raw_factory=None) -> tuple[lis
 #  1. 参数透传：不做白名单
 # ------------------------------------------------------------------ #
 def test_extra_passthrough_reaches_sdk(monkeypatch) -> None:
-    sink, gw = _gateway(monkeypatch)
-    gw.generate(
+    sink, client = _client(monkeypatch)
+    client.generate(
         LLMRequest(
             messages=[{"role": "user", "content": "x"}],
             max_tokens=100,
@@ -79,23 +79,25 @@ def test_extra_passthrough_reaches_sdk(monkeypatch) -> None:
 
 def test_extra_overrides_common_field(monkeypatch) -> None:
     """同名时 extra 显式覆盖（逃生舱不该被常用字段静默吃掉）"""
-    sink, gw = _gateway(monkeypatch)
-    gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], temperature=0.1, extra={"temperature": 0.7}))
+    sink, client = _client(monkeypatch)
+    client.generate(
+        LLMRequest(messages=[{"role": "user", "content": "x"}], temperature=0.1, extra={"temperature": 0.7})
+    )
     assert sink[0]["temperature"] == 0.7
 
 
 def test_none_fields_are_not_sent(monkeypatch) -> None:
     """None = 不下发，交给 provider 用服务端默认值"""
-    sink, gw = _gateway(monkeypatch)
-    gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}]))
+    sink, client = _client(monkeypatch)
+    client.generate(LLMRequest(messages=[{"role": "user", "content": "x"}]))
     assert "max_tokens" not in sink[0]
     assert "temperature" not in sink[0]
 
 
 def test_meta_never_reaches_payload(monkeypatch) -> None:
     """框架参数与 provider 参数彻底分离"""
-    sink, gw = _gateway(monkeypatch)
-    gw.generate(
+    sink, client = _client(monkeypatch)
+    client.generate(
         LLMRequest(
             messages=[{"role": "user", "content": "x"}],
             meta={"guard_policy": "strict", "tags": ["eval"]},
@@ -108,8 +110,8 @@ def test_meta_never_reaches_payload(monkeypatch) -> None:
 
 def test_framework_name_is_observation_only(monkeypatch) -> None:
     """name 是观测名（框架参数），不是 messages 的一部分"""
-    sink, gw = _gateway(monkeypatch)
-    gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], name="query-decompose"))
+    sink, client = _client(monkeypatch)
+    client.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], name="query-decompose"))
     assert sink[0]["name"] == "query-decompose"
 
 
@@ -117,8 +119,8 @@ def test_framework_name_is_observation_only(monkeypatch) -> None:
 #  2. 返回保真
 # ------------------------------------------------------------------ #
 def test_response_envelope_is_returned(monkeypatch) -> None:
-    _sink, gw = _gateway(monkeypatch)
-    resp = gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}]))
+    _sink, client = _client(monkeypatch)
+    resp = client.generate(LLMRequest(messages=[{"role": "user", "content": "x"}]))
     assert isinstance(resp, LLMResponse)
     assert resp.attempts == 1
     assert resp.provider == "primary"
@@ -134,16 +136,16 @@ def test_raw_response_is_preserved(monkeypatch) -> None:
         holder["raw"] = raw
         return raw
 
-    _sink, gw = _gateway(monkeypatch, raw_factory=factory)
-    resp = gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}]))
+    _sink, client = _client(monkeypatch, raw_factory=factory)
+    resp = client.generate(LLMRequest(messages=[{"role": "user", "content": "x"}]))
     assert resp.raw is holder["raw"]
     assert resp.text == "正文"
 
 
 def test_usage_and_finish_reason_are_extracted(monkeypatch) -> None:
     usage = SimpleNamespace(prompt_tokens=11, completion_tokens=22, total_tokens=33)
-    _sink, gw = _gateway(monkeypatch, raw_factory=lambda _kw: _raw_response("  带空格的正文  ", "length", usage))
-    resp = gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}]))
+    _sink, client = _client(monkeypatch, raw_factory=lambda _kw: _raw_response("  带空格的正文  ", "length", usage))
+    resp = client.generate(LLMRequest(messages=[{"role": "user", "content": "x"}]))
     assert resp.text == "带空格的正文"
     assert resp.finish_reason == "length"
     assert resp.usage == {"prompt_tokens": 11, "completion_tokens": 22, "total_tokens": 33}
@@ -152,8 +154,8 @@ def test_usage_and_finish_reason_are_extracted(monkeypatch) -> None:
 
 def test_empty_truncated_response_stays_empty(monkeypatch) -> None:
     """截断空正文如实返回空串 —— 不把 reasoning 当正文、不编造"""
-    _sink, gw = _gateway(monkeypatch, raw_factory=lambda _kw: _raw_response("", "length"))
-    resp = gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}]))
+    _sink, client = _client(monkeypatch, raw_factory=lambda _kw: _raw_response("", "length"))
+    resp = client.generate(LLMRequest(messages=[{"role": "user", "content": "x"}]))
     assert resp.text == ""
     assert resp.finish_reason == "length"
 
@@ -168,8 +170,8 @@ def test_streaming_response_keeps_raw_stream_and_empty_text(monkeypatch) -> None
         # include_usage 末包：choices 为空，不得抛错
         SimpleNamespace(choices=[]),
     ]
-    _sink, gw = _gateway(monkeypatch, raw_factory=lambda _kw: iter(chunks))
-    resp = gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], stream=True))
+    _sink, client = _client(monkeypatch, raw_factory=lambda _kw: iter(chunks))
+    resp = client.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], stream=True))
     assert resp.stream is True
     assert resp.text == ""  # 评审已决：流式 .text 只做透传
     assert list(resp.iter_text()) == ["甲", "乙"]
@@ -193,19 +195,19 @@ def test_fallback_is_visible_in_envelope(monkeypatch) -> None:
         return _FakeOpenAI(sink, fail_times=99 if calls["n"] == 1 else 0)
 
     monkeypatch.setattr(client_module, "OpenAI", factory)
-    gw = client_module.LLMClient()
-    resp = gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}]))
+    client = client_module.LLMClient()
+    resp = client.generate(LLMRequest(messages=[{"role": "user", "content": "x"}]))
 
     assert resp.fallback_used is True
     assert resp.provider == "fallback"
-    assert gw.stats["fallback_calls"] == 1
-    assert gw.stats["total_calls"] == 1
+    assert client.stats["fallback_calls"] == 1
+    assert client.stats["total_calls"] == 1
 
 
 def test_primary_failure_without_fallback_raises(monkeypatch) -> None:
     monkeypatch.delenv("FALLBACK_API_KEY", raising=False)
     monkeypatch.delenv("FALLBACK_BASE_URL", raising=False)
     monkeypatch.setattr(client_module.time, "sleep", lambda _s: None)
-    _sink, gw = _gateway(monkeypatch, fail_times=99)
+    _sink, client = _client(monkeypatch, fail_times=99)
     with pytest.raises(client_module.AllModelsFailedError):
-        gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}]))
+        client.generate(LLMRequest(messages=[{"role": "user", "content": "x"}]))

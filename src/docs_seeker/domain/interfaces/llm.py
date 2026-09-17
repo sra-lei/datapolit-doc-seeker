@@ -1,7 +1,7 @@
 """docs-seeker - LLM 接口
 
 LLM 调用的输入 / 输出契约。上层只依赖 ``LLMRequest`` / ``LLMResponse`` 两个实体，
-不感知具体 provider、SDK 结构或网关策略（重试 / 熔断 / 降级 / 护栏都藏在网关与
+不感知具体 provider、SDK 结构或客户端策略（重试 / 熔断 / 降级 / 护栏都藏在客户端与
 middleware 之后）。
 
 设计约定（2026-09 重构 Phase 0，方案见 ``docs/llm-gateway-guard-refactor.md``）：
@@ -24,7 +24,7 @@ class LLMRequest:
 
     - **常用 provider 参数**（``model`` / ``max_tokens`` / ``temperature`` /
       ``stream`` / ``timeout``）：保留强类型，便于发现与校验；
-    - **``extra`` 逃生舱**：任意 provider 参数**原样透传**，网关不做白名单
+    - **``extra`` 逃生舱**：任意 provider 参数**原样透传**，客户端不做白名单
       （``top_p`` / ``seed`` / ``stop`` / ``response_format`` / ``tools`` /
       ``logprobs`` / ``reasoning_effort`` ...），与常用字段同名时以 ``extra``
       为准（显式覆盖）；

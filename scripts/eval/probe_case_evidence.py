@@ -70,7 +70,7 @@ def main() -> int:
     is_abstain = case.get("expected_answer_type") == "abstain"
     question = case["question"]
 
-    gw = get_llm_client()
+    client = get_llm_client()
     retriever = get_composite_retriever()
     retriever.search("预热", top_k=1)  # 挡掉 BM25 建索引的冷启动
 
@@ -111,8 +111,8 @@ def main() -> int:
     t0 = time.time()
     st_answer, _conf, st_chunks, st_subs = RAGPipeline(
         retriever=retriever,
-        decomposer=QueryDecomposer(llm=gw),
-        generator=Generator(llm=gw),
+        decomposer=QueryDecomposer(llm=client),
+        generator=Generator(llm=client),
     ).run(question, top_k=args.top_k)
     st_elapsed = time.time() - t0
     st_texts = [c.text for c in st_chunks]
@@ -123,7 +123,7 @@ def main() -> int:
 
     # ---- AgentRunner ----
     t0 = time.time()
-    ar = AgentRunner(llm=gw, retriever=retriever).run(question, top_k=args.top_k)
+    ar = AgentRunner(llm=client, retriever=retriever).run(question, top_k=args.top_k)
     agent_elapsed = time.time() - t0
     ag_texts = [c.text for c in ar.evidence]
     # 关键：成文输入是 _format_evidence 的结果（受 agent_evidence_char_budget 截断）
@@ -161,7 +161,7 @@ def main() -> int:
         hits = 0
         for i in range(args.repeat):
             t0 = time.time()
-            r = AgentRunner(llm=gw, retriever=retriever).run(question, top_k=args.top_k)
+            r = AgentRunner(llm=client, retriever=retriever).run(question, top_k=args.top_k)
             el = time.time() - t0
             compose_input = AgentRunner._format_evidence(list(r.evidence))
             if is_abstain:

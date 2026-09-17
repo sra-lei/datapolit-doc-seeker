@@ -39,4 +39,4 @@ class LLMError(Exception):
 
 
 class AllModelsFailedError(LLMError):
-    """主模型与备用模型都失败（网关对上层暴露的统一失败类型）"""
+    """主模型与备用模型都失败（客户端对上层暴露的统一失败类型）"""

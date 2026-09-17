@@ -114,7 +114,7 @@ class ChatService:
                     logger.info(
                         f"Agent 路径完成: steps={len(ar.steps)} evidence={len(ar.evidence)} sufficient={ar.sufficient}"
                     )
-                except Exception as e:  # noqa: BLE001 — 回退契约：编排/网关任何异常都落回旧管线
+                except Exception as e:  # noqa: BLE001 — 回退契约：编排/客户端任何异常都落回旧管线
                     if not settings.agent_fallback_to_pipeline:
                         # 开发期默认不回退：让 agent 的失败显式暴露，而不是被旧管线的成功掩盖
                         # （生产默认回退，可用性优先；开关见 AGENT_FALLBACK_ENABLED）
