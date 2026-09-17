@@ -14,7 +14,8 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from docs_seeker.domain.models.chunk import Chunk
-from docs_seeker.infra.retrieval.metadata_filter import matches_metadata, parse_question_metadata
+from docs_seeker.domain.services.metadata import parse_question_metadata
+from docs_seeker.infra.retrieval.metadata_filter import matches_metadata
 
 _SNIPPET_CHARS = 350
 

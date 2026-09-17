@@ -141,8 +141,8 @@ class BM25Retriever(Retriever):
             query: 用户查询文本
             top_k: 返回数量
             meta_filter: 结构化元数据过滤（``{字段: [取值前缀]}``，见
-                ``metadata_filter``）；进程内索引是本地全量文档，用同一谓词
-                过滤候选集；None/空 = 不过滤（旧行为）。
+                ``domain.services.metadata.parse_question_metadata``）；进程内索引是
+                本地全量文档，用同一谓词过滤候选集；None/空 = 不过滤（旧行为）。
 
         Returns:
             按相关性降序的 Chunk 列表

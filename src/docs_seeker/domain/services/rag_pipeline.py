@@ -9,8 +9,8 @@ from docs_seeker.domain.interfaces.retriever import Retriever
 from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.domain.models.query import Query
 from docs_seeker.domain.services.generator import Generator
+from docs_seeker.domain.services.metadata import parse_question_metadata
 from docs_seeker.domain.services.query_decomposer import QueryDecomposer
-from docs_seeker.infra.retrieval.metadata_filter import parse_question_metadata
 
 
 class RAGPipeline:

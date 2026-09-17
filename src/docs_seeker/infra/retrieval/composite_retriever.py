@@ -48,7 +48,7 @@ class CompositeRetriever(Retriever):
 
         Args:
             meta_filter: 结构化元数据过滤（``{字段: [取值前缀]}``，见
-                ``metadata_filter.parse_question_metadata``）。dense 路转成 Milvus
+                ``domain.services.metadata.parse_question_metadata``）。dense 路转成 Milvus
                 过滤表达式、bm25 路转成进程内谓词；None/空 = 不过滤（旧行为）。
         """
         # Langfuse：检索观测只记录查询与结果规模，不捕获全量文档正文
