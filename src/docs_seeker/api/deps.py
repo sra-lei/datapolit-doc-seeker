@@ -5,7 +5,9 @@ from docs_seeker.domain.services.chat_service import ChatService
 from docs_seeker.domain.services.generator import Generator
 from docs_seeker.domain.services.guards import get_guard_chain
 from docs_seeker.domain.services.query_decomposer import QueryDecomposer
+from docs_seeker.domain.services.top_warmup import TopQuestionWarmup
 from docs_seeker.domain.services.usage import UsageTracker
+from docs_seeker.infra.cache.redis_lock import get_distributed_lock
 from docs_seeker.infra.cache.semantic_cache import get_semantic_cache
 from docs_seeker.infra.llm.client import get_llm_client
 from docs_seeker.infra.retrieval.composite_retriever import CompositeRetriever
@@ -19,6 +21,7 @@ _hybrid_router: HybridRouter | None = None
 _chat_service: ChatService | None = None
 _agent_runner: AgentRunner | None = None
 _usage_tracker: UsageTracker | None = None
+_top_warmup: TopQuestionWarmup | None = None
 
 
 def get_composite_retriever() -> CompositeRetriever:
@@ -83,3 +86,15 @@ def get_chat_service() -> ChatService:
             guards=get_guard_chain(),
         )
     return _chat_service
+
+
+def get_top_warmup() -> TopQuestionWarmup:
+    """热门问题预热器：复用 API 路径的 ChatService 单例（同一份检索/缓存）"""
+    global _top_warmup
+    if _top_warmup is None:
+        _top_warmup = TopQuestionWarmup(
+            service=get_chat_service(),
+            usage_tracker=get_usage_tracker(),
+            lock=get_distributed_lock(),
+        )
+    return _top_warmup

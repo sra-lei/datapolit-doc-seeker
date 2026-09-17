@@ -6,12 +6,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from docs_seeker.api.deps import get_chat_service, get_composite_retriever
+from docs_seeker.api.deps import get_composite_retriever, get_top_warmup
 from docs_seeker.api.middleware import RequestLoggingMiddleware
 from docs_seeker.api.routes import router
 from docs_seeker.core.config import settings
 from docs_seeker.core.metrics import metrics_response
-from docs_seeker.domain.services.top_warmup import get_top_warmup
 from docs_seeker.infra.logger.logging import setup_logging
 from docs_seeker.infra.tracker.langfuse import shutdown_langfuse
 
@@ -27,8 +26,8 @@ async def lifespan(app: FastAPI):
         logger.info("BM25 索引启动预热完成")
     except Exception as e:
         logger.warning(f"BM25 索引启动预热失败（首次检索时将自动构建）: {e}")
-    # 预热器注入与 API 路径共享的 ChatService，避免另建一套检索实例
-    get_top_warmup().start(service=get_chat_service())
+    # 预热器由组合根组装，复用与 API 路径共享的 ChatService（同一份检索索引/缓存）
+    get_top_warmup().start()
     yield
     get_top_warmup().stop()
     # 进程退出前冲刷并关闭 Langfuse 客户端（未配置时为 no-op）
