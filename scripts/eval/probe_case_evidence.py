@@ -61,9 +61,9 @@ def main() -> int:
     from docs_seeker.agent.runner import AgentRunner
     from docs_seeker.api.deps import get_composite_retriever
     from docs_seeker.domain.services.generator import Generator
+    from docs_seeker.domain.services.query_decomposer import QueryDecomposer
     from docs_seeker.domain.services.rag_pipeline import RAGPipeline
     from docs_seeker.infra.llm.gateway import get_llm_gateway
-    from docs_seeker.infra.retrieval.query_decomposer import QueryDecomposer
 
     norm = judge_lib._norm
     keyword_list = case.get("expected_keywords") or []
@@ -92,7 +92,15 @@ def main() -> int:
             in_ev = any(norm(kw) in norm(t) for t in evidence_texts)
             in_ci = norm(kw) in norm(compose_input)
             in_an = norm(kw) in norm(answer)
-            verdict = "✅ 进答案" if in_an else ("⚠️ 证据被成文预算挤掉" if (in_ev and not in_ci) else ("⚠️ 成文没写出来" if in_ci else "❌ 压根没召回"))
+            verdict = (
+                "✅ 进答案"
+                if in_an
+                else (
+                    "⚠️ 证据被成文预算挤掉"
+                    if (in_ev and not in_ci)
+                    else ("⚠️ 成文没写出来" if in_ci else "❌ 压根没召回")
+                )
+            )
             print(
                 f"   {kw[:18]:20} ①证据 {'有' if in_ev else '无'} | ②成文输入 {'有' if in_ci else '无'} | "
                 f"③答案 {'有' if in_an else '无'}  -> {verdict}"
@@ -120,16 +128,26 @@ def main() -> int:
     ag_texts = [c.text for c in ar.evidence]
     # 关键：成文输入是 _format_evidence 的结果（受 agent_evidence_char_budget 截断）
     ag_compose = AgentRunner._format_evidence(list(ar.evidence))
-    print(f"\n（agent {agent_elapsed:.1f}s，步数 {len(ar.steps)}，证据 {len(ar.evidence)} 条，成文输入 {len(ag_compose)} 字 / 预算 {settings.agent_evidence_char_budget}）")
+    print(
+        f"\n（agent {agent_elapsed:.1f}s，步数 {len(ar.steps)}，证据 {len(ar.evidence)} 条，成文输入 {len(ag_compose)} 字 / 预算 {settings.agent_evidence_char_budget}）"
+    )
     print("   决策轨迹：")
     for s in ar.steps:
-        print(f"     #{s.idx} {s.action:9} {str(s.action_input.get('query', ''))[:46]!r} obs={len(s.observation or '')}字")
+        print(
+            f"     #{s.idx} {s.action:9} {str(s.action_input.get('query', ''))[:46]!r} obs={len(s.observation or '')}字"
+        )
     check("AgentRunner", ag_texts, ag_compose, ar.answer)
 
     # 被预算挤掉的证据（②无但①有）逐条定位
-    dropped = [c for c in ar.evidence if any(norm(kw) in norm(c.text) for kw in keyword_list) and norm(c.text) not in norm(ag_compose)]
+    dropped = [
+        c
+        for c in ar.evidence
+        if any(norm(kw) in norm(c.text) for kw in keyword_list) and norm(c.text) not in norm(ag_compose)
+    ]
     if dropped:
-        print(f"\n⚠️ 含答案词但没进成文输入的证据 {len(dropped)} 条（被 {settings.agent_evidence_char_budget} 字预算丢弃）：")
+        print(
+            f"\n⚠️ 含答案词但没进成文输入的证据 {len(dropped)} 条（被 {settings.agent_evidence_char_budget} 字预算丢弃）："
+        )
         for c in dropped[:3]:
             print(f"   - {c.chapter}/{c.article} {str(c.source)[:40]} | {c.text[:90]}...")
 
@@ -169,8 +187,7 @@ def main() -> int:
                     where[kw] = "没召回" if not in_ev else ("成文预算截断" if not in_ci else "成文没写")
             print(
                 f"   第 {i + 1} 次: {'✅ 全中' if ok else '❌ 漏词'} | 步数 {len(r.steps)} 证据 {len(r.evidence)} | {el:4.1f}s | "
-                f"答案 {sum(per_kw.values())}/{len(per_kw)}"
-                + ("" if ok else f" | 断点: {where}")
+                f"答案 {sum(per_kw.values())}/{len(per_kw)}" + ("" if ok else f" | 断点: {where}")
             )
             if not ok:
                 # 失败样本的措辞：分辨「真没写」vs「换了说法」（判分是纯子串，后者同样丢分）

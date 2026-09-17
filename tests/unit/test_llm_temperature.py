@@ -19,7 +19,7 @@ from docs_seeker.core.config import Settings, settings
 from docs_seeker.domain.interfaces.llm import LLMRequest, LLMResponse
 from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.domain.services.generator import Generator
-from docs_seeker.infra.retrieval.query_decomposer import QueryDecomposer
+from docs_seeker.domain.services.query_decomposer import QueryDecomposer
 
 
 class RecordingLLM:

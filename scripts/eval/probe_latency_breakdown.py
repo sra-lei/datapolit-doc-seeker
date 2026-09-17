@@ -19,9 +19,9 @@ import time
 from docs_seeker.core.config import settings
 from docs_seeker.domain.interfaces.llm import LLMRequest
 from docs_seeker.domain.services.generator import Generator
+from docs_seeker.domain.services.query_decomposer import QueryDecomposer
 from docs_seeker.domain.services.rag_pipeline import RAGPipeline
 from docs_seeker.infra.llm.gateway import get_llm_gateway
-from docs_seeker.infra.retrieval.query_decomposer import QueryDecomposer
 
 DEFAULT_Q = "我准备注册亚马逊卖家账户，身份验证时对上传的营业执照和法人身份证照片有什么具体要求？"
 
@@ -84,7 +84,9 @@ def main() -> int:
             f"检索 {len(search_calls)} 次 小计 {search_sum:.1f}s | 其余 {total - llm_sum - search_sum:.1f}s{extra}"
         )
         for c in llm_calls:
-            print(f"   · llm  {c['name']:20} {c['model']:16} max_tokens={c['max_tokens']:>5} timeout={c['timeout']:>5} {c['elapsed']:5.1f}s")
+            print(
+                f"   · llm  {c['name']:20} {c['model']:16} max_tokens={c['max_tokens']:>5} timeout={c['timeout']:>5} {c['elapsed']:5.1f}s"
+            )
         for i, s in enumerate(search_calls, 1):
             print(f"   · 检索 #{i}  {s:5.1f}s")
 

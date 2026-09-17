@@ -5,12 +5,13 @@ import hashlib
 from langfuse import get_client, observe
 from loguru import logger
 
+from docs_seeker.domain.interfaces.retriever import Retriever
 from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.domain.models.query import Query
 from docs_seeker.domain.services.generator import Generator
+from docs_seeker.domain.services.query_decomposer import QueryDecomposer
 from docs_seeker.infra.retrieval.composite_retriever import CompositeRetriever
 from docs_seeker.infra.retrieval.metadata_filter import parse_question_metadata
-from docs_seeker.infra.retrieval.query_decomposer import QueryDecomposer
 
 
 class RAGPipeline:
@@ -18,7 +19,7 @@ class RAGPipeline:
 
     def __init__(
         self,
-        retriever: CompositeRetriever | None = None,
+        retriever: Retriever | None = None,
         decomposer: QueryDecomposer | None = None,
         generator: Generator | None = None,
     ):

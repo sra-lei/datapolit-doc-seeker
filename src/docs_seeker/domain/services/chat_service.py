@@ -6,12 +6,12 @@ from langfuse import get_client, observe, propagate_attributes
 from loguru import logger
 
 from docs_seeker.core.config import settings
+from docs_seeker.domain.interfaces.retriever import Retriever
 from docs_seeker.domain.services.generator import Generator, compute_confidence
 from docs_seeker.domain.services.guards import ANSWER_CTX, DOCUMENT_CTX, USER_INPUT_CTX, GuardChain, get_guard_chain
+from docs_seeker.domain.services.query_decomposer import QueryDecomposer
 from docs_seeker.domain.services.rag_pipeline import RAGPipeline
 from docs_seeker.infra.cache.semantic_cache import SemanticCache, get_semantic_cache
-from docs_seeker.infra.retrieval.composite_retriever import CompositeRetriever
-from docs_seeker.infra.retrieval.query_decomposer import QueryDecomposer
 from docs_seeker.infra.tracing import FEATURE_TAG, TRACE_NAME
 from docs_seeker.infra.usage import UsageTracker, get_usage_tracker
 
@@ -27,7 +27,7 @@ class ChatResult:
     cached: bool = False
     query_decomposed: list[str] | None = None
     agent_steps: list[dict] | None = None  # agent 路径的可审计 trace；旧管线为 None
-    agent_sufficient: bool | None = None   # agent 路径：是否主动拒答（证据不足）
+    agent_sufficient: bool | None = None  # agent 路径：是否主动拒答（证据不足）
 
 
 class ChatService:
@@ -35,7 +35,7 @@ class ChatService:
 
     def __init__(
         self,
-        retriever: CompositeRetriever | None = None,
+        retriever: Retriever | None = None,
         generator: Generator | None = None,
         decomposer: QueryDecomposer | None = None,
         cache: SemanticCache | None = None,
@@ -76,7 +76,9 @@ class ChatService:
         ):
             verdict = self.guards.inspect(question, USER_INPUT_CTX)
             if not verdict.allowed:
-                langfuse.update_current_span(level="ERROR", status_message=verdict.reason, output={"answer": verdict.reason})
+                langfuse.update_current_span(
+                    level="ERROR", status_message=verdict.reason, output={"answer": verdict.reason}
+                )
                 return ChatResult(answer=verdict.reason, confidence="low")
 
             # 热门问题计数（精确匹配归并；Redis 不可用时降级）
@@ -110,16 +112,14 @@ class ChatService:
                     agent_steps = [asdict(s) for s in ar.steps]
                     agent_sufficient = ar.sufficient
                     logger.info(
-                        f"Agent 路径完成: steps={len(ar.steps)} evidence={len(ar.evidence)} "
-                        f"sufficient={ar.sufficient}"
+                        f"Agent 路径完成: steps={len(ar.steps)} evidence={len(ar.evidence)} sufficient={ar.sufficient}"
                     )
                 except Exception as e:  # noqa: BLE001 — 回退契约：编排/网关任何异常都落回旧管线
                     if not settings.agent_fallback_to_pipeline:
                         # 开发期默认不回退：让 agent 的失败显式暴露，而不是被旧管线的成功掩盖
                         # （生产默认回退，可用性优先；开关见 AGENT_FALLBACK_ENABLED）
                         logger.error(
-                            f"Agent 路径失败且未启用回退（environment={settings.environment}）: "
-                            f"{type(e).__name__}: {e}"
+                            f"Agent 路径失败且未启用回退（environment={settings.environment}）: {type(e).__name__}: {e}"
                         )
                         raise
                     logger.warning(f"Agent 路径失败，回退旧单轮管线: {type(e).__name__}: {e}")
@@ -182,7 +182,9 @@ class ChatService:
         ):
             verdict = self.guards.inspect(question, USER_INPUT_CTX)
             if not verdict.allowed:
-                langfuse.update_current_span(level="ERROR", status_message=verdict.reason, output={"answer": verdict.reason})
+                langfuse.update_current_span(
+                    level="ERROR", status_message=verdict.reason, output={"answer": verdict.reason}
+                )
                 yield {"type": "error", "message": verdict.reason}
                 return
 
