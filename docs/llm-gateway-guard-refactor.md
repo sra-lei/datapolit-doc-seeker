@@ -225,7 +225,7 @@ domain/services/
 | Phase | 内容 | 验收 | 回退 |
 |---|---|---|---|
 | **0** | `LLMRequest` 加 `extra` / `meta`；`None` 不下发；`LLMResponse` 信封**直接启用**（无兼容开关），调用点 + 鸭子替身一次性迁移 | 新单测：`extra` 原样到达 SDK、`None` 字段不出现、`meta` 不进 payload、`raw` 与原始响应同一对象 | 单 commit 回滚（`git revert`） |
-| **1** | Middleware 骨架 + `Transport` 级把 retry/circuit/fallback/observability 从 gateway 内联逻辑搬成插件 | 现有 `test_llm_gateway.py` 3 项全绿 + 新增「fallback_used 标记」用例 | `TRANSPORT_MIDDLEWARES=[]` 回内联路径 |
+| **1** | Middleware 骨架 + `Transport` 级把 retry/circuit/fallback/observability 从 gateway 内联逻辑搬成插件 | 现有 `test_llm_gateway.py` 3 项全绿 + 新增「fallback_used 标记」用例 | **一步到位**（评审已决）：无内联回退路径，回退靠 `git revert`；运行期可用 `LLM_TRANSPORT_MIDDLEWARES` 裁剪链路 |
 | **2** | `BudgetGuardMiddleware` 收编 generator / decomposer 的重复兜底 | `test_llm_budget_guard.py` 11 项全绿，调用次数与预算序列不变 | 保留原函数，开关切换 |
 | **3** | Guard 全部 middleware 化并按评审**挂两处**（pipeline 边界 + gateway 内）；`chat_service` / `top_warmup` 只留一行链式调用；**新增文档正文注入扫描（仅告警）** | `test_guard.py` 全绿 + 新用例「文档内含注入指令 → 有告警日志、答案不变」+「agent 内部 LLM 调用经过 guard 链」 | 开关切回直接函数调用 |
 | **4** | 清理死代码（`CircuitBreaker.call` 改为真用）、单例改 deps 注入、错误链修复 | 全量单测 + 端到端一问（`/v1/chat`） | — |
@@ -287,4 +287,19 @@ domain/services/
   - `scripts/smoke_gateway.py` 真实 API 冒烟三条全过：普通调用（正文/usage/raw 均取到）、`extra={"top_p": 0.5}` 被真实 provider 接受、流式 `.text` 为空 + `iter_text()` 拼接正确。
 - **冒烟副产品**：预算给小（16 token）时推理模型正文为空、`finish_reason=length` —— 真实调用复现了单测里的场景，信封如实上报而非静默吞掉。
 - **未做**（后续 Phase）：middleware 骨架 / guard 双插槽 / 死代码清理 / 错误链修复 / 评估回归。
+
+### Phase 1（middleware 骨架 + transport 插件化）✅ 2026-09-17
+
+- **新增文件**：`infra/llm/middleware/base.py`（洋葱链 + `LLMCallContext` + `LLMMiddleware` 协议）、`middleware/transport.py`（observability / fallback / circuit_breaker / retry）、`infra/llm/circuit_breaker.py`（熔断器从 gateway 拆出）、`infra/llm/errors.py`。
+- **网关收敛**：`generate()` 只剩「起 ctx → 跑链路 → 盖章到信封」；`_invoke()` = 选 client/模型 → 组 payload → 调 SDK → 包信封。策略零内联。
+- **链路顺序**（外层→内层）：`observability → fallback → circuit_breaker → retry → terminal`
+  - `fallback` 在熔断外层：熔断打开时由它接管走备用（与旧行为一致）；
+  - `circuit_breaker` 在重试外层：**一个逻辑调用只记一次成败**，内部重试不会加速熔断。
+- **可插拔**：`LLM_TRANSPORT_MIDDLEWARES=observability,retry`（逗号分隔，空 = 默认链）可运行期裁剪；也可 `LLMGateway(middlewares=[...])` 显式注入。`/v1/stats` 新增 `llm.middlewares` 暴露当前链路。
+- **行为变更（重要，非等价处）**：
+  1. **熔断器从死代码变成真生效**：旧实现 `failure_count` 只被重置、从未累加，`state` 从未置 OPEN —— 「熔断」从未发生过（文档与 stats 都在展示一个恒 closed 的摆设）。现在连续失败到阈值（默认 5）会真的拒绝请求，冷却 60s 后半开试探。**无备用模型时表现为快速失败**，不再反复重试打后端。
+  2. **重试加了错误分类**：4xx（除 429 限流）不再退避重试，立即失败（旧实现一律重试 3 次、白等 7s）。
+  3. `stream_options` 注入从网关硬编码挪到 `observability` middleware（写 `request.extra`，它本就是 provider 参数）。
+- **验证**：`ruff check src tests` 通过；`pytest tests/unit` **116 passed**（107 + 新增 `test_llm_middleware.py` 9 项：重试成功 / 不可重试快失败 / 熔断打开后不打 SDK / 半开恢复 / 降级标记与模型 / 默认链路顺序 / 链路裁剪 / 显式注入 / stream_options 条件注入）；`scripts/smoke_gateway.py` 真实 API 三条全过（与 Phase 0 结果一致）。
+- **未做**：`budget_guard` 收编（Phase 2）/ guard 双插槽（Phase 3）/ 错误模型与死代码收尾（Phase 4）/ 评估回归（Phase 5）。
 

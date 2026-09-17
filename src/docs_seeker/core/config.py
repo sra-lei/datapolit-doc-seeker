@@ -70,6 +70,11 @@ class Settings(BaseSettings):
     # 判断类调用专用短超时（agent 循环内的逐步判断等）：120s × 重试最坏 ≈6 分钟
     # 会卡死循环，判断宁可快速失败走回退，也不要阻塞主流程
     llm_judge_timeout_seconds: float = 20.0
+    # Transport middleware 链（逗号分隔，顺序 = 外层到内层；空 = 默认链）。
+    # 可选：observability（观测参数）/ fallback（主备降级）/
+    #       circuit_breaker（熔断）/ retry（退避重试）。
+    # 例：LLM_TRANSPORT_MIDDLEWARES=observability,retry 可临时关掉降级与熔断。
+    llm_transport_middlewares: str = ""
 
     # 采样温度。0 = 确定性输出（**评估与 A/B 必须用 0**：同代码同语料下单轮
     # 22 题的分数摆幅曾达 0.75，噪声大于待测改动的量级）；>0 = 保留多样性。

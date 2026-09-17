@@ -56,6 +56,8 @@ class LLMStats(BaseModel):
     fallback_calls: int = 0
     circuit_state: str = "closed"
     circuit_failures: int = 0
+    # 当前生效的 transport middleware 链（顺序 = 外层到内层），便于线上核对策略是否被裁过
+    middlewares: list[str] = []
 
 
 class StatsResponse(BaseModel):

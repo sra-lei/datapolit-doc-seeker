@@ -1,22 +1,23 @@
 """
 docs-seeker - LLM 网关
-提供：重试、超时、熔断、降级、统一调用入口
+统一调用入口：网关本身只做三件事 —— **组 payload → 调 SDK → 包信封**；
+重试 / 熔断 / 降级 / 观测等策略全部下沉为可插拔 middleware（Phase 1）。
+
 已接入 Langfuse 链路追踪：OpenAI 客户端使用 langfuse.openai 的 drop-in 包装，
 自动把每次模型调用记录为 generation 观测（模型名、token 用量、耗时、错误）。
 
-设计约定（2026-09 重构 Phase 0，方案见 ``docs/llm-gateway-guard-refactor.md``）：
-- **参数透明**：常用字段过滤 ``None`` 后下发，``request.extra`` 原样合并 —— 网关不做
+设计约定（方案见 ``docs/llm-gateway-guard-refactor.md``）：
+- **参数透明**：常用字段过滤 ``None`` 后下发，``request.extra`` 原样合并 —— 不做
   provider 参数白名单，新增参数无需改网关；
-- **框架参数隔离**：``name`` / ``stream_options`` 由 ``_provider_extras`` 注入，与
-  provider 参数不同源（Phase 1 起由 observability middleware 接管）；
+- **框架参数隔离**：langfuse 专属的 ``name`` 由 ``_framework_params`` 注入，与
+  provider 参数不同源；``request.meta`` 永不下发；
 - **返回保真**：统一返回 ``LLMResponse`` 信封，``raw`` 保留原始响应，降级与重试以
-  ``fallback_used`` / ``attempts`` 显式暴露，不静默。
+  ``fallback_used`` / ``attempts`` / ``applied_middlewares`` 显式暴露，不静默。
 """
 
 import os
 import time
-from enum import Enum
-from threading import Lock
+from collections.abc import Callable
 
 from dotenv import load_dotenv
 from langfuse.openai import OpenAI
@@ -24,57 +25,35 @@ from loguru import logger
 
 from docs_seeker.core.config import settings
 from docs_seeker.domain.interfaces.llm import LLMProvider, LLMRequest, LLMResponse
+from docs_seeker.infra.llm.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError, CircuitState
+from docs_seeker.infra.llm.errors import AllModelsFailedError
+from docs_seeker.infra.llm.middleware import (
+    CircuitBreakerMiddleware,
+    FallbackMiddleware,
+    LLMCallContext,
+    LLMMiddleware,
+    MiddlewareChain,
+    ObservabilityMiddleware,
+    RetryMiddleware,
+)
 
 load_dotenv()
 
-
-class CircuitState(Enum):
-    CLOSED = "closed"
-    OPEN = "open"
-    HALF_OPEN = "half_open"
-
-
-class CircuitBreaker:
-    def __init__(self, failure_threshold: int = 5, recovery_timeout: int = 60):
-        self.failure_threshold = failure_threshold
-        self.recovery_timeout = recovery_timeout
-        self.state = CircuitState.CLOSED
-        self.failure_count = 0
-        self.last_failure_time = 0
-        self._lock = Lock()
-
-    def call(self, func, *args, **kwargs):
-        with self._lock:
-            if self.state == CircuitState.OPEN:
-                if time.time() - self.last_failure_time > self.recovery_timeout:
-                    logger.warning("熔断器进入半开状态")
-                    self.state = CircuitState.HALF_OPEN
-                else:
-                    raise CircuitBreakerOpenError("熔断器已打开，拒绝请求")
-        try:
-            result = func(*args, **kwargs)
-            with self._lock:
-                if self.state == CircuitState.HALF_OPEN:
-                    logger.info("熔断器恢复（半开→关闭）")
-                self.state = CircuitState.CLOSED
-                self.failure_count = 0
-            return result
-        except Exception as e:
-            with self._lock:
-                self.failure_count += 1
-                self.last_failure_time = time.time()
-                if self.failure_count >= self.failure_threshold:
-                    self.state = CircuitState.OPEN
-                    logger.error(f"熔断器打开！连续失败 {self.failure_count} 次")
-            raise e
-
-
-class CircuitBreakerOpenError(Exception):
-    pass
+__all__ = [
+    "AllModelsFailedError",
+    "CircuitBreaker",
+    "CircuitBreakerOpenError",
+    "CircuitState",
+    "LLMGateway",
+    "default_transport_middlewares",
+    "get_llm_gateway",
+]
 
 
 class LLMGateway(LLMProvider):
-    def __init__(self):
+    """LLM 网关：透明传输 + 可插拔策略链。"""
+
+    def __init__(self, middlewares: list[LLMMiddleware] | None = None):
         self.primary_client = OpenAI(api_key=settings.deepseek_api_key, base_url=settings.deepseek_base_url)
         self.primary_model = settings.llm_model
         self.primary_provider = "primary"
@@ -88,6 +67,54 @@ class LLMGateway(LLMProvider):
         self.total_calls = 0
         self.success_calls = 0
         self.fallback_calls = 0
+        # 传入 middlewares 可完全自定义链路（测试 / 特殊部署）；缺省走默认链
+        self.middlewares = list(middlewares) if middlewares is not None else default_transport_middlewares(self)
+        self._chain = MiddlewareChain(self.middlewares)
+
+    # ---- 对外入口 ----
+    def generate(self, request: LLMRequest) -> LLMResponse:
+        """调用 LLM，返回 ``LLMResponse`` 信封。
+
+        策略由 middleware 链决定（观测 / 降级 / 熔断 / 重试），网关不再内联。
+
+        ``request.model`` 非空时覆盖主模型（分层模型路由，见 LLM_GENERATE_MODEL）：
+        覆盖只影响本次调用 —— 生成层走非推理模型降延迟/成本，而「判断/改写」仍用
+        `LLM_MODEL` 指定的推理模型；降级时沿用本次覆盖的模型名。
+
+        ``request.timeout`` 非空时覆盖全局超时（判断类调用传 LLM_JUDGE_TIMEOUT_SECONDS
+        快速失败走回退，避免 120s × 重试卡住调用方循环）。
+        """
+        self.total_calls += 1
+        ctx = LLMCallContext(started_at=time.time())
+        resp = self._chain.run(request, ctx, lambda req: self._invoke(req, ctx))
+        # 策略执行结果盖章到信封（降级不再静默）
+        resp.provider = ctx.provider
+        resp.fallback_used = ctx.fallback_used
+        resp.applied_middlewares = list(ctx.applied_middlewares)
+        if ctx.fallback_used:
+            self.fallback_calls += 1
+        else:
+            self.success_calls += 1
+        return resp
+
+    # ---- 链路最内层：真正发起 SDK 调用 ----
+    def _invoke(self, request: LLMRequest, ctx: LLMCallContext) -> LLMResponse:
+        if ctx.provider == "fallback":
+            client, default_model = self.fallback_client, self.fallback_model
+        else:
+            client, default_model = self.primary_client, self.primary_model
+        if client is None:  # 理论不可达：fallback middleware 只在备用客户端存在时才切 provider
+            raise AllModelsFailedError("备用模型未配置")
+        payload = self._build_payload(request, request.model or default_model)
+        raw = client.chat.completions.create(**payload)
+        return LLMResponse.from_raw(
+            raw,
+            stream=request.stream,
+            provider=ctx.provider,
+            fallback_used=ctx.fallback_used,
+            attempts=ctx.attempts or 1,
+            latency_ms=int((time.time() - ctx.started_at) * 1000),
+        )
 
     # ---- 参数组装：唯一产出 provider payload 的地方 ----
     def _build_payload(self, request: LLMRequest, model: str) -> dict:
@@ -95,7 +122,8 @@ class LLMGateway(LLMProvider):
 
         规则：
         1. 常用字段过滤 ``None`` —— ``None`` = 不下发，用服务端默认值；
-        2. ``request.extra`` 原样合并 —— 任意 provider 参数可透传，网关不做白名单；
+        2. ``request.extra`` 原样合并 —— 任意 provider 参数可透传（含 middleware 注入的
+           ``stream_options``），网关不做白名单；
         3. ``request.meta`` **永不进入 payload**（框架参数不污染 provider 参数）。
         """
         payload: dict = {
@@ -110,107 +138,16 @@ class LLMGateway(LLMProvider):
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         payload.update(request.extra or {})
-        payload.update(self._provider_extras(request))
+        payload.update(self._framework_params(request))
         return payload
 
-    def _provider_extras(self, request: LLMRequest) -> dict:
-        """框架 / 观测参数（与 provider 参数不同源）。
+    def _framework_params(self, request: LLMRequest) -> dict:
+        """langfuse.openai drop-in 专属参数（**非** OpenAI 参数）。
 
-        - ``name``：Langfuse generation 观测名（``langfuse.openai`` drop-in 参数）；
-        - ``stream_options``：流式开启 usage 上报，否则 Langfuse 记不到 token 用量与成本。
-          OpenAI 会在最后一个 chunk（choices 为空）返回 usage。
-
-        Phase 1 起这两个键由 observability middleware 注入，网关不再关心。
+        ``name`` = generation 观测名。只有构造 client 的这一层知道它是不是 langfuse
+        包装，所以在这里注入；provider 参数走 ``extra``，两者分源。
         """
-        extras: dict = {}
-        if request.name:
-            extras["name"] = request.name
-        if request.stream:
-            extras["stream_options"] = {"include_usage": True}
-        return extras
-
-    def generate(self, request: LLMRequest) -> LLMResponse:
-        """调用 LLM，返回 ``LLMResponse`` 信封。
-
-        ``request.model`` 非空时覆盖主模型（分层模型路由，见 LLM_GENERATE_MODEL）：
-        覆盖只影响本次调用 —— 生成层走非推理模型降延迟/成本，而「判断/改写」仍用
-        `LLM_MODEL` 指定的推理模型。熔断降级时同样沿用本次覆盖的模型名。
-
-        ``request.timeout`` 非空时覆盖全局超时（判断类调用传 LLM_JUDGE_TIMEOUT_SECONDS
-        快速失败走回退，避免 120s × 重试卡住调用方循环）。
-
-        降级不再静默：走备用模型时 ``fallback_used=True``、``provider='fallback'``。
-        """
-        self.total_calls += 1
-        if self.circuit_breaker.state == CircuitState.OPEN:
-            if self.fallback_client:
-                return self._try_fallback(request)
-            raise AllModelsFailedError("熔断器已打开，且无备用模型")
-        try:
-            resp = self._call_with_retry(
-                self.primary_client,
-                request.model or self.primary_model,
-                request,
-                provider=self.primary_provider,
-            )
-            self.success_calls += 1
-            self.circuit_breaker.failure_count = 0
-            return resp
-        except Exception as e:
-            logger.error(f"主模型调用失败: {e}")
-            if self.fallback_client:
-                try:
-                    resp = self._try_fallback(request)
-                    self.fallback_calls += 1
-                    return resp
-                except Exception as fb_e:
-                    logger.error(f"备用模型也失败: {fb_e}")
-                    raise AllModelsFailedError("主模型和备用模型均失败") from fb_e
-            raise AllModelsFailedError(f"主模型失败且无备用: {e}") from e
-
-    def _try_fallback(self, request: LLMRequest) -> LLMResponse:
-        return self._call_with_retry(
-            self.fallback_client,
-            request.model or self.fallback_model,
-            request,
-            provider="fallback",
-            fallback_used=True,
-        )
-
-    def _call_with_retry(
-        self,
-        client,
-        model,
-        request: LLMRequest,
-        *,
-        provider: str,
-        fallback_used: bool = False,
-        max_retries: int = 3,
-    ) -> LLMResponse:
-        payload = self._build_payload(request, model)
-        last_error = None
-        started = time.time()
-        for attempt in range(max_retries + 1):
-            try:
-                raw = client.chat.completions.create(**payload)
-                return LLMResponse.from_raw(
-                    raw,
-                    stream=request.stream,
-                    provider=provider,
-                    fallback_used=fallback_used,
-                    attempts=attempt + 1,
-                    latency_ms=int((time.time() - started) * 1000),
-                )
-            except Exception as e:
-                last_error = e
-                if attempt < max_retries:
-                    wait = 2**attempt
-                    logger.warning(f"重试 {attempt + 1}/{max_retries}，等待 {wait}s: {e}")
-                    time.sleep(wait)
-                else:
-                    raise last_error from None
-        # 循环必然以 return / raise 结束；此处兜底只为静态类型收窄
-        raise last_error if last_error is not None else RuntimeError("LLM 调用未执行")
+        return {"name": request.name} if request.name else {}
 
     @property
     def stats(self) -> dict:
@@ -220,11 +157,32 @@ class LLMGateway(LLMProvider):
             "fallback_calls": self.fallback_calls,
             "circuit_state": self.circuit_breaker.state.value,
             "circuit_failures": self.circuit_breaker.failure_count,
+            "middlewares": [m.name for m in self.middlewares],
         }
 
 
-class AllModelsFailedError(Exception):
-    pass
+def default_transport_middlewares(gateway: LLMGateway) -> list[LLMMiddleware]:
+    """默认 transport 链（列表顺序 = 外层到内层）。
+
+    ``observability``（观测参数）→ ``fallback``（主备降级）→ ``circuit_breaker``
+    （每个逻辑调用记一次成败）→ ``retry``（同 provider 内退避重试）。
+
+    可用 ``LLM_TRANSPORT_MIDDLEWARES`` 覆盖（逗号分隔的名字，空 = 默认链）：
+    例 ``LLM_TRANSPORT_MIDDLEWARES=observability,retry`` 即关掉降级与熔断。
+    """
+    registry: dict[str, Callable[[], LLMMiddleware]] = {
+        "observability": ObservabilityMiddleware,
+        "fallback": lambda: FallbackMiddleware(lambda: gateway.fallback_client is not None),
+        "circuit_breaker": lambda: CircuitBreakerMiddleware(gateway.circuit_breaker),
+        "retry": RetryMiddleware,
+    }
+    names = [n.strip() for n in (settings.llm_transport_middlewares or "").split(",") if n.strip()]
+    if not names:
+        names = list(registry)
+    unknown = [n for n in names if n not in registry]
+    if unknown:
+        logger.warning(f"未知的 LLM transport middleware {unknown}，已忽略")
+    return [registry[n]() for n in names if n in registry]
 
 
 _llm_gateway: LLMGateway | None = None
