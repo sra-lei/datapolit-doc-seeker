@@ -370,3 +370,29 @@ domain/services/
   异常链保留 / 消息含 provider 明细 / 401 不可重试 / 主备都挂列两条 / 熔断打开被标记）。
 - **未做**：端到端一问（`/v1/chat`）归入 Phase 5（需重建镜像）。
 
+### Phase 5（部署 + v2 评估回归）✅ 2026-09-17
+
+- **部署**：线上容器此前处于 **crash loop**（见 `fix(logging)` `564ea0a`），修复后重建上线。
+  - ⚠️ 正规 `docker build`（`FROM python:3.12-slim`）卡在 deb.debian.org 的 apt 阶段
+    （9.6MB 拉 7 分钟无进展）→ 改用 **overlay 镜像**（`FROM <旧镜像>` + `COPY src/`）。因
+    `uv sync` 是 editable 安装（源码即 `/app/src`），对纯代码改动等价且秒级完成；旧镜像保留
+    `:pre-refactor-rollback` tag 可回滚。**正规全量镜像需在 CNB CI 或网络更好的环境重建。**
+  - 上线验证三项：`/v1/health` ok（milvus + redis）；启动日志 `BM25 索引构建完成: docs=1055`；
+    `/v1/stats` 的 `llm.middlewares` = `[guard, observability, fallback, circuit_breaker,
+    budget_guard, retry]`（新链路确实生效）；`/v1/chat` 端到端一问命中 T01 期望关键词；
+    注入问题被边界护栏拒答（`检测到提示注入模式，请求已拒绝`）。
+- **评估口径**（用户确认）：`LLM_TEMPERATURE=0` + `LLM_DECOMPOSE_TEMPERATURE=0` +
+  `LLM_GENERATE_MODEL=deepseek-chat` + `use_cache=false` + `top_k=10`；集合
+  `chartermate_docs_insightforge`；30 题（`scripts/eval/cases/eval-set-v2.json`）。
+- **结果（同配置两轮）**：run1 **29/30（0.9833）**、run2 **28/30（0.9722）**；拒答 **4/4** 两轮全对。
+- **对照基线**：v2-c 26/30（0.9389）。⚠️ 但历史三次 v2 基线**自身不一致** —— v2-a 4/0.185、
+  v2-b 21/0.828、v2-c 26/0.939（同为 09-16 15:30–15:42、同参数），说明其中有被污染/中途失败的
+  轮次，基线数字只能当参考上限，不能当精确对照。
+- **逐题对账**：run1 相对 v2-c **零题下降**、3 题上升（T07 0.667→1.0、T10 0.5→1.0、T17 0.5→1.0）；
+  run2 仅 T19 波动（1.0→0.667），同样 3 题上升。
+- **结论（按实验纪律记账）**：本轮真正能下的结论是 **无回归** —— 该重构在成功路径上行为等价
+  （retry 分类 / 熔断 / 错误模型只影响失败路径；预算兜底与护栏在改造前后行为一致）。T07/T10/T17
+  的稳定提升**不归因于本次重构**（这三条路径没有行为改动），更可能是运行间/服务状态差异
+  （case 级 ±1-2 例属噪声）。若要主张收益，需另做单变量实验或同口径多轮对照。
+- **未做**：正规全量镜像重建（留给 CNB CI）。
+
