@@ -1,6 +1,7 @@
 """LLM middleware：可插拔的调用策略"""
 
 from docs_seeker.infra.llm.middleware.base import CallNext, LLMCallContext, LLMMiddleware, MiddlewareChain
+from docs_seeker.infra.llm.middleware.guards import LLMGuardMiddleware
 from docs_seeker.infra.llm.middleware.transport import (
     BudgetGuardMiddleware,
     CircuitBreakerMiddleware,
@@ -16,6 +17,7 @@ __all__ = [
     "CircuitBreakerMiddleware",
     "FallbackMiddleware",
     "LLMCallContext",
+    "LLMGuardMiddleware",
     "LLMMiddleware",
     "MiddlewareChain",
     "ObservabilityMiddleware",

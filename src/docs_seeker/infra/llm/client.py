@@ -26,7 +26,7 @@ from loguru import logger
 from docs_seeker.core.config import settings
 from docs_seeker.domain.interfaces.llm import LLMProvider
 from docs_seeker.domain.models.llm import LLMRequest, LLMResponse
-from docs_seeker.domain.services.guards import LLMGuardMiddleware, get_guard_chain
+from docs_seeker.domain.services.guards import get_guard_chain
 from docs_seeker.infra.llm.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError, CircuitState
 from docs_seeker.infra.llm.errors import AllModelsFailedError, LLMError
 from docs_seeker.infra.llm.middleware import (
@@ -34,6 +34,7 @@ from docs_seeker.infra.llm.middleware import (
     CircuitBreakerMiddleware,
     FallbackMiddleware,
     LLMCallContext,
+    LLMGuardMiddleware,
     LLMMiddleware,
     MiddlewareChain,
     ObservabilityMiddleware,
