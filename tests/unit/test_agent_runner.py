@@ -92,9 +92,10 @@ def test_happy_path_retrieve_then_final(monkeypatch):
     assert decide_call["timeout"] == 30.0
     assert compose_call["model"] == "deepseek-chat"
     assert compose_call["timeout"] is None
-    # 决策调用挂预算兜底：推理模型 + 小预算（AGENT_JUDGE_MAX_TOKENS）是「思考吃满预算 →
-    # 空正文」的高发组合，与生成 / 改写两处对齐
+    # 决策 / 成文两处都挂预算兜底：推理模型 + 小预算是「思考吃满预算 → 空正文」的高发组合，
+    # 成文与普通生成路径同源，同样不能静默交空答案
     assert decide_call["meta"].get("budget_guard") is True
+    assert compose_call["meta"].get("budget_guard") is True
     assert retriever.calls[0]["meta_filter"] is None
 
 

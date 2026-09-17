@@ -226,6 +226,9 @@ class AgentRunner:
                 temperature=settings.llm_temperature,
                 name="agent-compose",
                 model=settings.llm_generate_model or None,  # 空 = 沿用 LLM_MODEL（旧行为）
+                # 成文与普通生成路径同源（非推理模型 + LLM_GENERATE_MAX_TOKENS），
+                # 同样挂预算兜底，避免截断空正文时静默交出空答案
+                meta={"budget_guard": True},
             )
         )
         answer = parse_llm_response(resp).content.strip()
