@@ -121,7 +121,7 @@ class LLMResponse:
 ```
 
 - 上层默认用 `.text` / `.finish_reason`；**要什么有什么**，`raw` 兜底。
-- 流式：`generate()` 同样返回 `LLMResponse`，`.raw` 是原生 stream 迭代器，`.text` 为空（或按需聚合）。
+- 流式：`generate()` 同样返回 `LLMResponse`，`.raw` 是原生 stream 迭代器，**`.text` 置空、只做透传**（评审已决：不在信封层聚合全文，聚合交给调用方）。
 - **降级可见**（修 R3）：`fallback_used=True` + `provider` 如实上报，评估脚本可据此剔除/分组。
 - **启用方式**：信封**直接生效，不设兼容开关**（评审已决）；所有调用点与鸭子类型替身一次性迁移到 `LLMResponse`。
 
@@ -154,8 +154,15 @@ class LLMMiddleware(Protocol):
 
 | 插槽 | 位置 | 职责 | 默认链 |
 |---|---|---|---|
-| **Transport 级** | gateway 内部，每次 LLM 调用 | 观测 / 熔断 / 重试 / 降级 / 预算 / provider 参数适配 | `observability → circuit_breaker → retry → fallback → budget_guard → payload_adapter` |
-| **Application 级** | pipeline 边界，每次用户问答 | 注入检测 / 话题白名单 / PII 脱敏 / 输出校验 | `injection_guard → topic_policy → pii_redaction` |
+| **Transport 级** | gateway 内部，每次 LLM 调用 | 观测 / 熔断 / 重试 / 降级 / 预算 / provider 参数适配 | `observability → circuit_breaker → retry → fallback → budget_guard` |
+| **Application 级** | **pipeline 边界 + gateway 内部两处**（评审已决） | 注入检测 / 话题白名单 / PII 脱敏 / 输出校验 | `injection_guard → topic_policy → pii_redaction` |
+
+**两处挂载的语义分工**（避免一刀切误杀）：
+
+- **pipeline 边界那处**：作用对象 = **用户原始 question** / 最终 answer。可短路拒答、可改写输出。
+- **gateway 内部那处**：作用对象 = **送到 provider 的完整 messages**（含 system prompt、多轮历史、检索到的证据正文）。让 agent 循环内的每一次 LLM 调用（决策 / 成文 / 判断）都受保护，而不是只有最外层用户问答。
+- **短路策略按插槽区分**：边界处可拒答；gateway 内那处**默认只检测/告警不短路**——与「文档正文命中仅告警」同一口径（证据文本被误判的成本高于收益）。
+- 脱敏类 middleware 幂等，两处都跑无副作用；检测类在 gateway 内只记一次调用级日志，避免重复刷屏。
 
 - 配置驱动，可关、可排序、可换：
 ```yaml
@@ -167,8 +174,11 @@ llm:
     - {name: fallback, enabled: true}
     - {name: budget_guard, enabled: true}
   app_middlewares:
-    - {name: injection_guard, enabled: true, scan_documents: true}
-    - {name: pii_redaction, enabled: true}
+    mount: [pipeline_boundary, gateway_inner]   # 评审已决：两处挂载
+    chain:
+      - {name: injection_guard, enabled: true, scan_documents: true, block_on: [pipeline_boundary]}
+      - {name: topic_policy, enabled: true, block_on: [pipeline_boundary]}
+      - {name: pii_redaction, enabled: true}
 ```
 
 ---
@@ -217,7 +227,7 @@ domain/services/
 | **0** | `LLMRequest` 加 `extra` / `meta`；`None` 不下发；`LLMResponse` 信封**直接启用**（无兼容开关），调用点 + 鸭子替身一次性迁移 | 新单测：`extra` 原样到达 SDK、`None` 字段不出现、`meta` 不进 payload、`raw` 与原始响应同一对象 | 单 commit 回滚（`git revert`） |
 | **1** | Middleware 骨架 + `Transport` 级把 retry/circuit/fallback/observability 从 gateway 内联逻辑搬成插件 | 现有 `test_llm_gateway.py` 3 项全绿 + 新增「fallback_used 标记」用例 | `TRANSPORT_MIDDLEWARES=[]` 回内联路径 |
 | **2** | `BudgetGuardMiddleware` 收编 generator / decomposer 的重复兜底 | `test_llm_budget_guard.py` 11 项全绿，调用次数与预算序列不变 | 保留原函数，开关切换 |
-| **3** | Guard 全部 middleware 化，`chat_service` / `top_warmup` 只留一行链式调用；**新增文档正文注入扫描（仅告警）** | `test_guard.py` 全绿 + 新用例「文档内含注入指令 → 有告警日志、答案不变」 | 开关切回直接函数调用 |
+| **3** | Guard 全部 middleware 化并按评审**挂两处**（pipeline 边界 + gateway 内）；`chat_service` / `top_warmup` 只留一行链式调用；**新增文档正文注入扫描（仅告警）** | `test_guard.py` 全绿 + 新用例「文档内含注入指令 → 有告警日志、答案不变」+「agent 内部 LLM 调用经过 guard 链」 | 开关切回直接函数调用 |
 | **4** | 清理死代码（`CircuitBreaker.call` 改为真用）、单例改 deps 注入、错误链修复 | 全量单测 + 端到端一问（`/v1/chat`） | — |
 | **5** | 文档 + 评估（口径不变：`LLM_TEMPERATURE=0` + `LLM_GENERATE_MODEL=deepseek-chat`） | 22 题均分不低于当前 21/22 基线 | — |
 
@@ -245,11 +255,10 @@ domain/services/
 | 1 | 方案交付方式 | **先落 `docs/` 正式方案文档并推送**，评审通过后再开工 |
 | 2 | `LLMResponse` 信封开关 | **直接启用、一步到位**，不设兼容开关 |
 | 3 | 检索文档正文命中注入 | **仅记录日志告警，不干预答案**（可用性优先） |
+| 4 | 应用级 guard 插槽位置 | **挂两处**：pipeline 边界（可短路）+ gateway 内部（默认只告警），agent 循环内调用同样受保护 |
+| 5 | 流式 response 的 `.text` 语义 | **只做透传**，`.text` 置空，聚合交给调用方 |
 
-### 待定（开工前确认）
-
-1. **应用级 guard 插槽位置**：只在 pipeline 边界挂一次，还是 gateway 内也挂一份（让 agent 内部调用也受保护）？
-2. **流式 response 的 `.text` 语义**：置空（只透传 raw chunk 流）还是按需聚合全文？
+> 至此设计项全部关闭，可开工。
 
 ## 8. Phase 0 建议切片
 
