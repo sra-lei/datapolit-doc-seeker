@@ -33,13 +33,15 @@ class LLMCallContext:
     """一次逻辑调用的共享状态。
 
     ``provider`` / ``attempts`` / ``fallback_used`` 由 middleware 维护、终端读取；
-    ``applied_middlewares`` 记录**实际执行过**的 middleware，便于审计归因。
+    ``applied_middlewares`` 记录**实际执行过**的 middleware，便于审计归因；
+    ``provider_errors`` 收集各 provider 的原始异常，供失败时组装可归因的错误对象。
     """
 
     provider: str = "primary"
     attempts: int = 0
     fallback_used: bool = False
     applied_middlewares: list[str] = field(default_factory=list)
+    provider_errors: list[tuple[str, Exception]] = field(default_factory=list)
     started_at: float = 0.0
     extras: dict[str, Any] = field(default_factory=dict)
 

@@ -71,12 +71,22 @@ class FallbackMiddleware:
             return call_next(request)
         except CircuitBreakerOpenError as e:
             if not self._has_fallback():
-                raise AllModelsFailedError("熔断器已打开，且无备用模型") from e
+                raise AllModelsFailedError(
+                    "熔断器已打开，且无备用模型",
+                    attempts=ctx.attempts,
+                    provider_errors=ctx.provider_errors,
+                    retryable=False,
+                ) from e
             return self._switch_to_fallback(request, ctx, call_next)
         except Exception as e:
             logger.error(f"主模型调用失败: {e}")
             if not self._has_fallback():
-                raise AllModelsFailedError(f"主模型失败且无备用: {e}") from e
+                raise AllModelsFailedError(
+                    f"主模型失败且无备用: {e}",
+                    attempts=ctx.attempts,
+                    provider_errors=ctx.provider_errors,
+                    retryable=is_retryable(e),
+                ) from e
             return self._switch_to_fallback(request, ctx, call_next)
 
     def _switch_to_fallback(self, request: LLMRequest, ctx: LLMCallContext, call_next: CallNext) -> LLMResponse:
@@ -86,7 +96,14 @@ class FallbackMiddleware:
             return call_next(request)
         except Exception as fb_e:
             logger.error(f"备用模型也失败: {fb_e}")
-            raise AllModelsFailedError("主模型和备用模型均失败") from fb_e
+            ctx.provider_errors.append(("fallback", fb_e))
+            raise AllModelsFailedError(
+                "主模型和备用模型均失败",
+                attempts=ctx.attempts,
+                provider_errors=ctx.provider_errors,
+                fallback_attempted=True,
+                retryable=False,
+            ) from fb_e
 
 
 class CircuitBreakerMiddleware:
@@ -158,6 +175,9 @@ class RetryMiddleware:
                 return call_next(request)
             except Exception as e:
                 if attempt >= self._max_retries or not is_retryable(e):
+                    # 记录该 provider 的原始异常：上层组装失败对象时要能归因，
+                    # 不能只留一句「都失败了」。异常链由 bare raise 保留。
+                    ctx.provider_errors.append((ctx.provider, e))
                     raise
                 wait = 2**attempt
                 logger.warning(f"重试 {attempt + 1}/{self._max_retries}，等待 {wait}s: {e}")

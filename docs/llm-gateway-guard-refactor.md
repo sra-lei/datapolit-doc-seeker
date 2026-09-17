@@ -351,3 +351,22 @@ domain/services/
   `api.deps` / `top_warmup` / guards 导入链自检通过。
 - **未做**：错误模型与死代码收尾（Phase 4）/ 评估回归（Phase 5）。
 
+### Phase 4（失败可归因：错误模型 + 错误链）✅ 2026-09-17
+
+- `infra/llm/errors.py`：`LLMError` 基类（带 `attempts` / `provider_errors` /
+  `fallback_attempted` / `retryable`，`__str__` 自动附 provider 明细）；`AllModelsFailedError`
+  继承之 —— 失败不再是一句「都失败了」。
+- `LLMCallContext` 增 `provider_errors`：`RetryMiddleware` 在**最终失败 / 不可重试**时记录
+  `(provider, 原始异常)`；`FallbackMiddleware` 在「无备用」与「备用也失败」两条路径上组装带
+  上下文的 `AllModelsFailedError`，并 `from e` 保留直接起因。
+- **错误链**：Phase 1 重写时已消除 `raise ... from None`（重试中间件用 bare `raise`），本次用
+  测试锁死（`__cause__` 必须是原始异常）。
+- **死代码**：`CircuitBreaker.call` 已在 Phase 1 删除（改为 `before_call` /
+  `record_success` / `record_failure` 真用），本次复查全仓无残留。
+- **单例注入（有意保留）**：`api/deps.py` 已显式注入网关与护栏；`Generator` /
+  `QueryDecomposer` / `ChatService` 保留 `or get_llm_gateway()` 兜底，供 top_warmup 的
+  「未注入时的独立使用」路径 —— 强删会破坏该路径且无收益，故不动。
+- **验证**：`ruff` 通过；`pytest` **142 passed**（+6 项 `test_llm_errors.py`：主挂可归因 /
+  异常链保留 / 消息含 provider 明细 / 401 不可重试 / 主备都挂列两条 / 熔断打开被标记）。
+- **未做**：端到端一问（`/v1/chat`）归入 Phase 5（需重建镜像）。
+
