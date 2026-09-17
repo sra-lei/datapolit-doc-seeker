@@ -10,7 +10,6 @@ from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.domain.models.query import Query
 from docs_seeker.domain.services.generator import Generator
 from docs_seeker.domain.services.query_decomposer import QueryDecomposer
-from docs_seeker.infra.retrieval.composite_retriever import CompositeRetriever
 from docs_seeker.infra.retrieval.metadata_filter import parse_question_metadata
 
 
@@ -19,13 +18,14 @@ class RAGPipeline:
 
     def __init__(
         self,
-        retriever: Retriever | None = None,
-        decomposer: QueryDecomposer | None = None,
-        generator: Generator | None = None,
+        retriever: Retriever,
+        decomposer: QueryDecomposer,
+        generator: Generator,
     ):
-        self.retriever = retriever or CompositeRetriever()
-        self.decomposer = decomposer or QueryDecomposer()
-        self.generator = generator or Generator()
+        # 全部依赖由组合根（api/deps）注入；不在这里兜底，保持 domain 不依赖 infra
+        self.retriever = retriever
+        self.decomposer = decomposer
+        self.generator = generator
 
     @observe(name="retrieve-context", capture_input=False, capture_output=False)
     def prepare(

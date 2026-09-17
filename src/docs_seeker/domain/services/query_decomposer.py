@@ -9,7 +9,6 @@ from docs_seeker.core.config import prompts, settings
 from docs_seeker.domain.interfaces.llm import LLMProvider
 from docs_seeker.domain.models.llm import LLMRequest, LLMResponse
 from docs_seeker.domain.models.query import Query
-from docs_seeker.infra.llm.client import get_llm_client
 
 _DEFAULT_PROMPT = (
     "你是一个查询分解助手。将以下问题分解为 2-4 个更具体的子问题，用于多路检索。\n"
@@ -21,9 +20,9 @@ _DEFAULT_PROMPT = (
 class QueryDecomposer:
     """查询分解器：用 LLM 将复杂问题拆分为多个子问题"""
 
-    def __init__(self, llm: LLMProvider | None = None):
-        # 允许注入 LLM（deps 组装点传入）；缺省时走全局客户端单例
-        self.llm = llm or get_llm_client()
+    def __init__(self, llm: LLMProvider):
+        # LLM 由组合根（api/deps）注入；不在这里兜底，保持 domain 不依赖 infra
+        self.llm = llm
 
     def _call(self, prompt: str, max_tokens: int, name: str, budget_guard: bool = False):
         return self.llm.generate(

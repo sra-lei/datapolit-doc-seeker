@@ -11,9 +11,9 @@ from docs_seeker.domain.services.generator import Generator, compute_confidence
 from docs_seeker.domain.services.guards import ANSWER_CTX, DOCUMENT_CTX, USER_INPUT_CTX, GuardChain, get_guard_chain
 from docs_seeker.domain.services.query_decomposer import QueryDecomposer
 from docs_seeker.domain.services.rag_pipeline import RAGPipeline
-from docs_seeker.infra.cache.semantic_cache import SemanticCache, get_semantic_cache
+from docs_seeker.infra.cache.semantic_cache import SemanticCache
 from docs_seeker.infra.tracing import FEATURE_TAG, TRACE_NAME
-from docs_seeker.infra.usage import UsageTracker, get_usage_tracker
+from docs_seeker.infra.usage import UsageTracker
 
 # 写入语义缓存 / 组装响应时保留的字段（与 SourceDoc 对齐）
 CACHE_FIELDS = ("id", "text", "source", "chapter", "chapter_title", "section", "section_title", "score", "sources")
@@ -35,18 +35,19 @@ class ChatService:
 
     def __init__(
         self,
-        retriever: Retriever | None = None,
-        generator: Generator | None = None,
-        decomposer: QueryDecomposer | None = None,
-        cache: SemanticCache | None = None,
-        usage_tracker: UsageTracker | None = None,
+        retriever: Retriever,
+        generator: Generator,
+        decomposer: QueryDecomposer,
+        cache: SemanticCache,
+        usage_tracker: UsageTracker,
         agent_runner=None,
         guards: GuardChain | None = None,
     ):
-        # 允许注入共享依赖（deps 组装点传入）；缺省时自建/走全局单例（独立使用场景）
+        # 依赖由组合根（api/deps）注入；不在这里兜底，保持 domain 不依赖 infra
+        # 工厂。guards 是 domain 内部单例，保留缺省（独立使用场景）。
         self.pipeline = RAGPipeline(retriever=retriever, decomposer=decomposer, generator=generator)
-        self.cache = cache or get_semantic_cache()
-        self.usage_tracker = usage_tracker or get_usage_tracker()
+        self.cache = cache
+        self.usage_tracker = usage_tracker
         # Agentic M1：默认关闭（settings.agent_enabled）；开启后 agent 路径任何异常
         # 都回退下面的旧单轮管线，保证可灰度可回退
         self.agent_runner = agent_runner

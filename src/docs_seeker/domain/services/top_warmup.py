@@ -31,8 +31,10 @@ class TopQuestionWarmup:
         self._service: ChatService | None = None
 
     def _get_service(self) -> ChatService:
+        # 必须由 start(service=...) 注入（api/main 传 get_chat_service()）；
+        # 不再无参构造 ChatService —— 那会绕过组合根、丢失共享依赖
         if self._service is None:
-            self._service = ChatService()
+            raise RuntimeError("TopQuestionWarmup 未注入 ChatService：请通过 start(service=...) 装配")
         return self._service
 
     def start(self, service: ChatService | None = None) -> None:
