@@ -8,6 +8,7 @@
 ```
 scripts/eval/
 ├── run_local_baseline.py   # 跑一轮：逐题问答 + 子串判分，结果落 JSON
+├── run_agent_eval.py       # 跑一轮（AgentRunner / Agentic M1 路径）+ agent 专属指标
 ├── compare_eval_runs.py    # 跨轮对照：逐题分数矩阵 + 摆幅/总分
 ├── cases/                  # 离线用例（纳入 git，跨机器共享）
 │   └── eval-set-v2.json    #   亚马逊卖家侧语料用例（出题后提交于此）
@@ -52,6 +53,27 @@ uv run python scripts/eval/run_local_baseline.py `
 云端习惯把结果放到仓库外：追加 `--out-dir /opt/datapilot-backups/eval-runs`。
 
 不传 `--cases-file` 时回退读 core API（`127.0.0.1:3002`，仅云端）。
+
+## 跑 AgentRunner（Agentic M1）一轮
+
+```bash
+LANGFUSE_TRACING_ENABLED=false .venv/bin/python scripts/eval/run_agent_eval.py \
+  --cases-file scripts/eval/cases/eval-set-v2.json --label agent-m1 --workers 2
+```
+
+与基线的唯一区别是「谁回答问题」：本脚本**直接驱动 `AgentRunner`**（ReAct 循环 + 检索工具 +
+两段式充分性裁决），不经过 `ChatService`（因此不受 `AGENT_ENABLED` 影响，也不需要起服务）。
+判分**复用 `run_local_baseline.py` 的同一套实现**，结果 JSON 同构、可直接喂
+`compare_eval_runs.py` 做跨管线对照；此外多记：
+
+- `agent_steps` / `agent_actions` / `agent_parse_errors`：循环步数与动作轨迹
+- `agent_sufficient`：agent 自己的充分性终态（与判分的拒答启发式对照看）
+- `agent_stats`：平均步数、P50/P95 耗时、空答案数、异常题数
+- `params` 额外写死 agent 口径（`agent_max_steps` / `agent_judge_max_tokens` /
+  `agent_evidence_char_budget`），可用 `--max-steps` 临时覆盖步数上限
+
+⚠️ agent 每题 LLM 调用次数是单轮的多倍（决策 + 成文 + 可能的核实），`--workers` 建议 2 起，
+别按单轮的并发开。
 
 ## 跨轮对照
 
