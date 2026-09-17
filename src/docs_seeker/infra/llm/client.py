@@ -1,6 +1,6 @@
 """
-docs-seeker - LLM 网关
-统一调用入口：网关本身只做三件事 —— **组 payload → 调 SDK → 包信封**；
+docs-seeker - LLM 客户端
+统一调用入口：客户端本身只做三件事 —— **组 payload → 调 SDK → 包信封**；
 重试 / 熔断 / 降级 / 观测等策略全部下沉为可插拔 middleware（Phase 1）。
 
 已接入 Langfuse 链路追踪：OpenAI 客户端使用 langfuse.openai 的 drop-in 包装，
@@ -8,7 +8,7 @@ docs-seeker - LLM 网关
 
 设计约定（方案见 ``docs/llm-gateway-guard-refactor.md``）：
 - **参数透明**：常用字段过滤 ``None`` 后下发，``request.extra`` 原样合并 —— 不做
-  provider 参数白名单，新增参数无需改网关；
+  provider 参数白名单，新增参数无需改客户端；
 - **框架参数隔离**：langfuse 专属的 ``name`` 由 ``_framework_params`` 注入，与
   provider 参数不同源；``request.meta`` 永不下发；
 - **返回保真**：统一返回 ``LLMResponse`` 信封，``raw`` 保留原始响应，降级与重试以
@@ -47,14 +47,14 @@ __all__ = [
     "CircuitBreakerOpenError",
     "CircuitState",
     "LLMError",
-    "LLMGateway",
+    "LLMClient",
     "default_transport_middlewares",
-    "get_llm_gateway",
+    "get_llm_client",
 ]
 
 
-class LLMGateway(LLMProvider):
-    """LLM 网关：透明传输 + 可插拔策略链。"""
+class LLMClient(LLMProvider):
+    """LLM 客户端：透明传输 + 可插拔策略链。"""
 
     def __init__(self, middlewares: list[LLMMiddleware] | None = None):
         self.primary_client = OpenAI(api_key=settings.deepseek_api_key, base_url=settings.deepseek_base_url)
@@ -81,7 +81,7 @@ class LLMGateway(LLMProvider):
     def generate(self, request: LLMRequest) -> LLMResponse:
         """调用 LLM，返回 ``LLMResponse`` 信封。
 
-        策略由 middleware 链决定（观测 / 降级 / 熔断 / 重试），网关不再内联。
+        策略由 middleware 链决定（观测 / 降级 / 熔断 / 重试），客户端不再内联。
 
         ``request.model`` 非空时覆盖主模型（分层模型路由，见 LLM_GENERATE_MODEL）：
         覆盖只影响本次调用 —— 生成层走非推理模型降延迟/成本，而「判断/改写」仍用
@@ -129,7 +129,7 @@ class LLMGateway(LLMProvider):
         规则：
         1. 常用字段过滤 ``None`` —— ``None`` = 不下发，用服务端默认值；
         2. ``request.extra`` 原样合并 —— 任意 provider 参数可透传（含 middleware 注入的
-           ``stream_options``），网关不做白名单；
+           ``stream_options``），客户端不做白名单；
         3. ``request.meta`` **永不进入 payload**（框架参数不污染 provider 参数）。
         """
         payload: dict = {
@@ -167,7 +167,7 @@ class LLMGateway(LLMProvider):
         }
 
 
-def default_transport_middlewares(gateway: LLMGateway) -> list[LLMMiddleware]:
+def default_transport_middlewares(client: LLMClient) -> list[LLMMiddleware]:
     """默认 transport 链（列表顺序 = 外层到内层）。
 
     ``guard``（扫 messages，仅告警）→ ``observability``（观测参数）→ ``fallback``
@@ -183,8 +183,8 @@ def default_transport_middlewares(gateway: LLMGateway) -> list[LLMMiddleware]:
     registry: dict[str, Callable[[], LLMMiddleware]] = {
         "guard": lambda: LLMGuardMiddleware(get_guard_chain()),
         "observability": ObservabilityMiddleware,
-        "fallback": lambda: FallbackMiddleware(lambda: gateway.fallback_client is not None),
-        "circuit_breaker": lambda: CircuitBreakerMiddleware(gateway.circuit_breaker),
+        "fallback": lambda: FallbackMiddleware(lambda: client.fallback_client is not None),
+        "circuit_breaker": lambda: CircuitBreakerMiddleware(client.circuit_breaker),
         "budget_guard": BudgetGuardMiddleware,
         "retry": RetryMiddleware,
     }
@@ -197,11 +197,11 @@ def default_transport_middlewares(gateway: LLMGateway) -> list[LLMMiddleware]:
     return [registry[n]() for n in names if n in registry]
 
 
-_llm_gateway: LLMGateway | None = None
+_llm_client: LLMClient | None = None
 
 
-def get_llm_gateway() -> LLMGateway:
-    global _llm_gateway
-    if _llm_gateway is None:
-        _llm_gateway = LLMGateway()
-    return _llm_gateway
+def get_llm_client() -> LLMClient:
+    global _llm_client
+    if _llm_client is None:
+        _llm_client = LLMClient()
+    return _llm_client

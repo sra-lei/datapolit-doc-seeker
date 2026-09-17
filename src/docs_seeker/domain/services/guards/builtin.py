@@ -91,7 +91,7 @@ _guard_chain: GuardChain | None = None
 
 
 def get_guard_chain() -> GuardChain:
-    """进程内单例：边界挂载与 gateway 内挂载共用同一份护栏配置。"""
+    """进程内单例：边界挂载与 client 内挂载共用同一份护栏配置。"""
     global _guard_chain
     if _guard_chain is None:
         _guard_chain = build_guard_chain()

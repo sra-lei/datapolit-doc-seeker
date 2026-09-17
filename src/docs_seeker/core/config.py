@@ -82,7 +82,7 @@ class Settings(BaseSettings):
     llm_circuit_recovery_seconds: int = 60
     # 应用级护栏链（逗号分隔，顺序 = 执行顺序；空 = 全部内置）。
     # 可选：injection_guard（提示注入）/ topic_policy（话题白名单）/ pii_redaction（输出脱敏）。
-    # 同一份配置同时用于 pipeline 边界（可拒答/可改写）与 gateway 内（仅告警）两处挂载。
+    # 同一份配置同时用于 pipeline 边界（可拒答/可改写）与 client 内（仅告警）两处挂载。
     llm_guards: str = ""
 
     # 采样温度。0 = 确定性输出（**评估与 A/B 必须用 0**：同代码同语料下单轮

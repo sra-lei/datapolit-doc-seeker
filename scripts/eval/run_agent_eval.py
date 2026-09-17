@@ -77,12 +77,12 @@ def main() -> int:
     from docs_seeker.agent.runner import AgentRunner  # noqa: E402
     from docs_seeker.api.deps import get_composite_retriever  # noqa: E402
     from docs_seeker.core.config import settings  # noqa: E402
-    from docs_seeker.infra.llm.gateway import get_llm_gateway  # noqa: E402
+    from docs_seeker.infra.llm.client import get_llm_client  # noqa: E402
 
     if args.max_steps is not None:
         settings.agent_max_steps = args.max_steps
 
-    runner = AgentRunner(llm=get_llm_gateway(), retriever=get_composite_retriever())
+    runner = AgentRunner(llm=get_llm_client(), retriever=get_composite_retriever())
 
     params = {
         "runner": "AgentRunner(in-process)",
@@ -152,9 +152,7 @@ def main() -> int:
             "agent_actions": [s.action for s in ar.steps],
             "agent_sufficient": ar.sufficient,
             "agent_parse_errors": sum(1 for s in ar.steps if s.action == "parse_error"),
-            "sources_head": [
-                {"source": s.get("source"), "chapter": s.get("chapter")} for s in sources[:3]
-            ],
+            "sources_head": [{"source": s.get("source"), "chapter": s.get("chapter")} for s in sources[:3]],
         }
 
     t_start = time.time()
@@ -176,7 +174,9 @@ def main() -> int:
         f"平均耗时 {sum(elapses) / len(elapses):.1f}s | P50 {_pct(elapses, 0.5):.1f}s | "
         f"P95 {_pct(elapses, 0.95):.1f}s | 空答案 {sum(1 for r in results if not r['answer'])} 条"
     )
-    print(f"平均步数 {sum(steps) / len(steps):.1f} | 动作解析失败题 {sum(1 for r in results if r.get('agent_parse_errors'))} 条")
+    print(
+        f"平均步数 {sum(steps) / len(steps):.1f} | 动作解析失败题 {sum(1 for r in results if r.get('agent_parse_errors'))} 条"
+    )
     if abst:
         ok = sum(1 for r in abst if r["passed"])
         print(f"拒答正确率: {ok}/{len(abst)}（判分口径同基线）")

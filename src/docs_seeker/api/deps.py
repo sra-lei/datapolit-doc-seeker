@@ -6,7 +6,7 @@ from docs_seeker.domain.services.generator import Generator
 from docs_seeker.domain.services.guards import get_guard_chain
 from docs_seeker.domain.services.query_decomposer import QueryDecomposer
 from docs_seeker.infra.cache.semantic_cache import get_semantic_cache
-from docs_seeker.infra.llm.gateway import get_llm_gateway
+from docs_seeker.infra.llm.client import get_llm_client
 from docs_seeker.infra.retrieval.composite_retriever import CompositeRetriever
 from docs_seeker.infra.retrieval.hybrid_router import HybridRouter
 from docs_seeker.infra.usage import get_usage_tracker
@@ -29,14 +29,14 @@ def get_composite_retriever() -> CompositeRetriever:
 def get_generator() -> Generator:
     global _generator
     if _generator is None:
-        _generator = Generator(llm=get_llm_gateway())
+        _generator = Generator(llm=get_llm_client())
     return _generator
 
 
 def get_query_decomposer() -> QueryDecomposer:
     global _query_decomposer
     if _query_decomposer is None:
-        _query_decomposer = QueryDecomposer(llm=get_llm_gateway())
+        _query_decomposer = QueryDecomposer(llm=get_llm_client())
     return _query_decomposer
 
 
@@ -52,7 +52,7 @@ def get_agent_runner() -> AgentRunner:
     global _agent_runner
     if _agent_runner is None:
         _agent_runner = AgentRunner(
-            llm=get_llm_gateway(),
+            llm=get_llm_client(),
             retriever=get_composite_retriever(),
         )
     return _agent_runner
@@ -70,7 +70,7 @@ def get_chat_service() -> ChatService:
             cache=get_semantic_cache(),
             usage_tracker=get_usage_tracker(),
             agent_runner=get_agent_runner(),
-            # 护栏链：与 gateway 内那处共用同一份配置/实例
+            # 护栏链：与 client 内那处共用同一份配置/实例
             guards=get_guard_chain(),
         )
     return _chat_service

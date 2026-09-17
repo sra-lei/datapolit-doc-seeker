@@ -4,7 +4,7 @@
 
 - **pipeline 边界**（``ChatService``）：用户输入可拒答、答案可改写（脱敏）、
   检索文档仅告警；
-- **gateway 内**（``LLMGuardMiddleware``，transport 链最外层）：扫描送 provider 的
+- **client 内**（``LLMGuardMiddleware``，transport 链最外层）：扫描送 provider 的
   messages，**仅告警不短路**，让 agent 循环内的每次 LLM 调用也经过护栏。
 """
 

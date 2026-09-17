@@ -8,7 +8,7 @@ from loguru import logger
 from docs_seeker.core.config import prompts, settings
 from docs_seeker.domain.interfaces.llm import LLMProvider, LLMRequest, LLMResponse
 from docs_seeker.domain.models.query import Query
-from docs_seeker.infra.llm.gateway import get_llm_gateway
+from docs_seeker.infra.llm.client import get_llm_client
 
 _DEFAULT_PROMPT = (
     "你是一个查询分解助手。将以下问题分解为 2-4 个更具体的子问题，用于多路检索。\n"
@@ -22,7 +22,7 @@ class QueryDecomposer:
 
     def __init__(self, llm: LLMProvider | None = None):
         # 允许注入 LLM（deps 组装点传入）；缺省时走全局网关单例
-        self.llm = llm or get_llm_gateway()
+        self.llm = llm or get_llm_client()
 
     def _call(self, prompt: str, max_tokens: int, name: str, budget_guard: bool = False):
         return self.llm.generate(

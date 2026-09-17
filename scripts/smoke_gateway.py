@@ -24,7 +24,7 @@ os.environ.setdefault("LANGFUSE_TRACING_ENABLED", "false")
 
 from docs_seeker.core.config import settings  # noqa: E402
 from docs_seeker.domain.interfaces.llm import LLMRequest  # noqa: E402
-from docs_seeker.infra.llm.gateway import LLMGateway  # noqa: E402
+from docs_seeker.infra.llm.client import LLMClient  # noqa: E402
 
 PROMPT = [{"role": "user", "content": "只回复两个字：收到"}]
 
@@ -35,13 +35,15 @@ BUDGET = 2000
 
 
 def main() -> int:
-    gw = LLMGateway()
+    gw = LLMClient()
     failures: list[str] = []
 
     # 1. 普通调用
     resp = gw.generate(LLMRequest(messages=PROMPT, max_tokens=BUDGET, temperature=0.0, name="smoke-basic"))
     print(f"[1] text={resp.text!r} finish={resp.finish_reason} usage={resp.usage}")
-    print(f"    provider={resp.provider} fallback={resp.fallback_used} attempts={resp.attempts} raw={'有' if resp.raw is not None else '无'}")
+    print(
+        f"    provider={resp.provider} fallback={resp.fallback_used} attempts={resp.attempts} raw={'有' if resp.raw is not None else '无'}"
+    )
     if not resp.text:
         failures.append("普通调用正文为空")
     if resp.raw is None:
@@ -62,7 +64,9 @@ def main() -> int:
     print(f"[2] extra 透传 text={resp2.text!r} finish={resp2.finish_reason}")
 
     # 3. 流式：只透传 + iter_text 聚合
-    resp3 = gw.generate(LLMRequest(messages=PROMPT, max_tokens=BUDGET, temperature=0.0, name="smoke-stream", stream=True))
+    resp3 = gw.generate(
+        LLMRequest(messages=PROMPT, max_tokens=BUDGET, temperature=0.0, name="smoke-stream", stream=True)
+    )
     deltas = list(resp3.iter_text())
     print(f"[3] stream text={resp3.text!r} deltas={len(deltas)} 拼接={''.join(deltas)!r}")
     if resp3.text != "":

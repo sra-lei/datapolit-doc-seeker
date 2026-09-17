@@ -2,7 +2,7 @@ from loguru import logger
 
 from docs_seeker.core.config import settings
 from docs_seeker.domain.interfaces.llm import LLMRequest
-from docs_seeker.infra.llm.gateway import get_llm_gateway
+from docs_seeker.infra.llm.client import get_llm_client
 from docs_seeker.infra.logger.logging import setup_logging
 
 SYSTEM_PROMPT = """
@@ -24,7 +24,7 @@ def chat(question: str):
     logger.info(f"用户问题: {question}")
     trajectory.append({"role": "user", "content": question})
     cur_loop = 0
-    llm = get_llm_gateway()
+    llm = get_llm_client()
     while cur_loop < MAX_LOOP:
         cur_loop += 1
         logger.info(trajectory)

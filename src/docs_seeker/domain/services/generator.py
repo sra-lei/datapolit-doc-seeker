@@ -5,7 +5,7 @@ from loguru import logger
 from docs_seeker.core.config import prompts, settings
 from docs_seeker.domain.interfaces.llm import LLMProvider, LLMRequest, LLMResponse
 from docs_seeker.domain.models.chunk import Chunk
-from docs_seeker.infra.llm.gateway import get_llm_gateway
+from docs_seeker.infra.llm.client import get_llm_client
 
 _DEFAULT_SYSTEM_PROMPT = (
     "你是一个专业的文档问答助手。请根据以下检索到的文档内容回答用户问题。\n"
@@ -19,8 +19,8 @@ _DEFAULT_SYSTEM_PROMPT = (
 
 class Generator:
     def __init__(self, llm: LLMProvider | None = None):
-        # 允许注入 LLM（deps 组装点传入）；缺省时走全局网关单例
-        self.llm = llm or get_llm_gateway()
+        # 允许注入 LLM（deps 组装点传入）；缺省时走全局客户端单例
+        self.llm = llm or get_llm_client()
 
     def _build_messages(
         self, question: str, docs: list[Chunk], conversation_history: list[dict] | None = None

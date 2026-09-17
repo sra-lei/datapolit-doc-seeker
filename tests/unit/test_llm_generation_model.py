@@ -17,9 +17,7 @@ from docs_seeker.core.config import Settings, settings
 from docs_seeker.domain.interfaces.llm import LLMRequest
 from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.domain.services.generator import Generator
-from docs_seeker.infra import llm as llm_pkg
-
-gateway_module = llm_pkg.gateway
+from docs_seeker.infra.llm import client as client_module
 
 
 class _FakeOpenAI:
@@ -39,7 +37,7 @@ class _FakeOpenAI:
 
 def _gateway_with_fake_client(monkeypatch) -> list[dict]:
     sink: list[dict] = []
-    monkeypatch.setattr(gateway_module, "OpenAI", lambda **kwargs: _FakeOpenAI(sink))
+    monkeypatch.setattr(client_module, "OpenAI", lambda **kwargs: _FakeOpenAI(sink))
     return sink
 
 
@@ -47,23 +45,23 @@ def test_class_default_is_empty_so_behaviour_is_unchanged():
     assert Settings.model_fields["llm_generate_model"].default == ""
 
 
-def test_gateway_model_override_wins(monkeypatch):
+def test_client_model_override_wins(monkeypatch):
     sink = _gateway_with_fake_client(monkeypatch)
-    gw = gateway_module.LLMGateway()
+    gw = client_module.LLMClient()
     gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], max_tokens=100, model="deepseek-chat"))
     assert sink[0]["model"] == "deepseek-chat"
 
 
-def test_gateway_without_override_uses_primary_model(monkeypatch):
+def test_client_without_override_uses_primary_model(monkeypatch):
     sink = _gateway_with_fake_client(monkeypatch)
-    gw = gateway_module.LLMGateway()
+    gw = client_module.LLMClient()
     gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], max_tokens=100))
     assert sink[0]["model"] == gw.primary_model
 
 
 def test_generator_passes_configured_generation_model(monkeypatch):
     sink = _gateway_with_fake_client(monkeypatch)
-    gateway = gateway_module.LLMGateway()
+    gateway = client_module.LLMClient()
     with patch.object(settings, "llm_generate_model", "deepseek-chat"):
         Generator(llm=gateway).generate("问题", [Chunk(id="c1", text="正文")])
     assert sink[0]["model"] == "deepseek-chat"
@@ -71,7 +69,7 @@ def test_generator_passes_configured_generation_model(monkeypatch):
 
 def test_generator_without_override_keeps_primary_model(monkeypatch):
     sink = _gateway_with_fake_client(monkeypatch)
-    gateway = gateway_module.LLMGateway()
+    gateway = client_module.LLMClient()
     with patch.object(settings, "llm_generate_model", ""):
         Generator(llm=gateway).generate("问题", [Chunk(id="c1", text="正文")])
     assert sink[0]["model"] == gateway.primary_model

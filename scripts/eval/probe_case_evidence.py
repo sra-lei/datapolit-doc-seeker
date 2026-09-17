@@ -63,14 +63,14 @@ def main() -> int:
     from docs_seeker.domain.services.generator import Generator
     from docs_seeker.domain.services.query_decomposer import QueryDecomposer
     from docs_seeker.domain.services.rag_pipeline import RAGPipeline
-    from docs_seeker.infra.llm.gateway import get_llm_gateway
+    from docs_seeker.infra.llm.client import get_llm_client
 
     norm = judge_lib._norm
     keyword_list = case.get("expected_keywords") or []
     is_abstain = case.get("expected_answer_type") == "abstain"
     question = case["question"]
 
-    gw = get_llm_gateway()
+    gw = get_llm_client()
     retriever = get_composite_retriever()
     retriever.search("预热", top_k=1)  # 挡掉 BM25 建索引的冷启动
 

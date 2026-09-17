@@ -2,7 +2,7 @@
 
 合并自两侧骨架：
 - Role 枚举与 used_fallback 来自对话循环骨架；
-- LLMMessage 是 gateway 响应的中立映射（隔离 vendor 字段）；
+- LLMMessage 是 client 响应的中立映射（隔离 vendor 字段）；
 - AgentStep 是每一步的可审计记录；AgentResult 带证据列表与充分性裁决。
 """
 

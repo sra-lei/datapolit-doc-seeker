@@ -1,4 +1,4 @@
-"""gateway 内的 guard 插槽：扫描送 provider 的 messages（**仅告警**）。
+"""client 内的 guard 插槽：扫描送 provider 的 messages（**仅告警**）。
 
 与 pipeline 边界那处**共用同一份护栏配置**（``get_guard_chain()``），但策略不同：
 

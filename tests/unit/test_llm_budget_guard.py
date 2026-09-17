@@ -28,7 +28,7 @@ from docs_seeker.domain.models.query import Query
 from docs_seeker.domain.services.chat_service import ChatService
 from docs_seeker.domain.services.generator import Generator, compute_confidence
 from docs_seeker.domain.services.query_decomposer import QueryDecomposer
-from docs_seeker.infra.llm import gateway as gateway_module
+from docs_seeker.infra.llm import client as client_module
 
 _EMPTY_TRUNCATED = ("", "length")  # 推理吃满预算：正文空 + 截断
 _EMPTY_STOPPED = ("", "stop")  # 真的没内容（非截断）
@@ -56,11 +56,11 @@ def _scripted_gateway(monkeypatch, script: list[tuple[str, str]]):
 
             self.chat = SimpleNamespace(completions=_Completions())
 
-    monkeypatch.setattr(gateway_module, "OpenAI", _FakeOpenAI)
-    monkeypatch.setattr(gateway_module.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(client_module, "OpenAI", _FakeOpenAI)
+    monkeypatch.setattr(client_module.time, "sleep", lambda _s: None)
     monkeypatch.delenv("FALLBACK_API_KEY", raising=False)
     monkeypatch.delenv("FALLBACK_BASE_URL", raising=False)
-    return gateway_module.LLMGateway(), sink
+    return client_module.LLMClient(), sink
 
 
 def _budgets(sink: list[dict]) -> list[int]:

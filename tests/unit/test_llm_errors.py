@@ -19,7 +19,7 @@ from types import SimpleNamespace
 import pytest
 
 from docs_seeker.domain.interfaces.llm import LLMRequest
-from docs_seeker.infra.llm import gateway as gateway_module
+from docs_seeker.infra.llm import client as client_module
 from docs_seeker.infra.llm.errors import AllModelsFailedError, LLMError
 
 PROMPT = LLMRequest(messages=[{"role": "user", "content": "x"}])
@@ -58,13 +58,15 @@ class _FakeOpenAI:
 def no_fallback(monkeypatch):
     monkeypatch.delenv("FALLBACK_API_KEY", raising=False)
     monkeypatch.delenv("FALLBACK_BASE_URL", raising=False)
-    monkeypatch.setattr(gateway_module.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(client_module.time, "sleep", lambda _s: None)
 
 
-def _primary_only_gateway(monkeypatch, error_factory=None) -> gateway_module.LLMGateway:
+def _primary_only_gateway(monkeypatch, error_factory=None) -> client_module.LLMClient:
     sink: list[dict] = []
-    monkeypatch.setattr(gateway_module, "OpenAI", lambda **kwargs: _FakeOpenAI(sink, fail_times=99, error_factory=error_factory))
-    return gateway_module.LLMGateway()
+    monkeypatch.setattr(
+        client_module, "OpenAI", lambda **kwargs: _FakeOpenAI(sink, fail_times=99, error_factory=error_factory)
+    )
+    return client_module.LLMClient()
 
 
 # ------------------------------------------------------------------ #
@@ -118,15 +120,15 @@ def test_non_retryable_failure_is_marked(no_fallback, monkeypatch) -> None:
 def test_both_providers_failure_lists_both_errors(monkeypatch) -> None:
     monkeypatch.setenv("FALLBACK_API_KEY", "fk")
     monkeypatch.setenv("FALLBACK_BASE_URL", "https://fallback.example/v1")
-    monkeypatch.setattr(gateway_module.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(client_module.time, "sleep", lambda _s: None)
 
     sink: list[dict] = []
 
     def factory(**kwargs):
         return _FakeOpenAI(sink, fail_times=99)  # 主、备都永远失败
 
-    monkeypatch.setattr(gateway_module, "OpenAI", factory)
-    gw = gateway_module.LLMGateway()
+    monkeypatch.setattr(client_module, "OpenAI", factory)
+    gw = client_module.LLMClient()
     with pytest.raises(AllModelsFailedError) as excinfo:
         gw.generate(PROMPT)
 
@@ -149,4 +151,4 @@ def test_open_circuit_without_fallback_is_marked(no_fallback, monkeypatch) -> No
     err = excinfo.value
     assert err.retryable is False
     assert "熔断" in str(err)
-    assert isinstance(err.__cause__, gateway_module.CircuitBreakerOpenError)
+    assert isinstance(err.__cause__, client_module.CircuitBreakerOpenError)

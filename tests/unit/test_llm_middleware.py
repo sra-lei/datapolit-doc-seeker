@@ -1,6 +1,6 @@
 """Transport middleware 单测：重试 / 熔断 / 降级 / 观测 + 链路可插拔（Phase 1）。
 
-这些策略原本内联在 ``LLMGateway.generate`` 里，Phase 1 拆成 middleware，要求
+这些策略原本内联在 ``LLMClient.generate`` 里，Phase 1 拆成 middleware，要求
 行为等价且可插拔：
 
 - **重试**：可重试错误退避重试，不可重试错误（4xx 非 429）立即失败；
@@ -21,7 +21,7 @@ import pytest
 
 from docs_seeker.core.config import settings
 from docs_seeker.domain.interfaces.llm import LLMRequest
-from docs_seeker.infra.llm import gateway as gateway_module
+from docs_seeker.infra.llm import client as client_module
 from docs_seeker.infra.llm.circuit_breaker import CircuitState
 from docs_seeker.infra.llm.errors import AllModelsFailedError
 
@@ -65,8 +65,8 @@ class _FakeOpenAI:
 def install(monkeypatch):
     """安装假客户端；返回 (sink, 构造网关的工厂)"""
     sink: list[dict] = []
-    monkeypatch.setattr(gateway_module.time, "sleep", lambda _s: None)  # 跳过退避等待
-    monkeypatch.setattr(gateway_module, "OpenAI", lambda **kwargs: _FakeOpenAI(sink))
+    monkeypatch.setattr(client_module.time, "sleep", lambda _s: None)  # 跳过退避等待
+    monkeypatch.setattr(client_module, "OpenAI", lambda **kwargs: _FakeOpenAI(sink))
     return sink
 
 
@@ -74,7 +74,7 @@ def install(monkeypatch):
 def install_multi(monkeypatch):
     """按构造顺序返回不同客户端（用于主/备双客户端场景）"""
     sink: list[dict] = []
-    monkeypatch.setattr(gateway_module.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(client_module.time, "sleep", lambda _s: None)
     clients: list[_FakeOpenAI] = []
 
     def factory(**kwargs):
@@ -83,7 +83,7 @@ def install_multi(monkeypatch):
         clients[0].fail_times = 99  # 第一个构造 = 主客户端：永远失败
         return client
 
-    monkeypatch.setattr(gateway_module, "OpenAI", factory)
+    monkeypatch.setattr(client_module, "OpenAI", factory)
     return sink, clients
 
 
@@ -91,7 +91,7 @@ def install_multi(monkeypatch):
 #  重试
 # ------------------------------------------------------------------ #
 def test_retry_succeeds_after_transient_failures(install) -> None:
-    gw = gateway_module.LLMGateway()
+    gw = client_module.LLMClient()
     gw.primary_client.fail_times = 2
     resp = gw.generate(PROMPT)
     assert resp.text == "ok"
@@ -105,7 +105,7 @@ def test_non_retryable_error_fails_fast(install, monkeypatch) -> None:
     monkeypatch.delenv("FALLBACK_BASE_URL", raising=False)
     sink = install
     sink.clear()
-    gw = gateway_module.LLMGateway()
+    gw = client_module.LLMClient()
     gw.primary_client.fail_times = 99
     gw.primary_client._error_factory = _AuthError
     with pytest.raises(AllModelsFailedError):
@@ -121,7 +121,7 @@ def test_circuit_breaker_opens_and_fails_fast(install, monkeypatch) -> None:
     monkeypatch.delenv("FALLBACK_BASE_URL", raising=False)
     sink = install
     sink.clear()
-    gw = gateway_module.LLMGateway()
+    gw = client_module.LLMClient()
     gw.circuit_breaker.failure_threshold = 2
     gw.primary_client.fail_times = 99
 
@@ -141,7 +141,7 @@ def test_circuit_breaker_half_open_recovers(install, monkeypatch) -> None:
     monkeypatch.delenv("FALLBACK_BASE_URL", raising=False)
     sink = install
     sink.clear()
-    gw = gateway_module.LLMGateway()
+    gw = client_module.LLMClient()
     gw.circuit_breaker.failure_threshold = 1
     gw.primary_client.fail_times = 99
     with pytest.raises(AllModelsFailedError):
@@ -165,7 +165,7 @@ def test_fallback_switches_provider_and_marks_envelope(install_multi, monkeypatc
     monkeypatch.setenv("FALLBACK_BASE_URL", "https://fallback.example/v1")
     monkeypatch.setenv("FALLBACK_MODEL", "fallback-model")
     sink, clients = install_multi
-    gw = gateway_module.LLMGateway()
+    gw = client_module.LLMClient()
 
     resp = gw.generate(PROMPT)
 
@@ -182,7 +182,7 @@ def test_fallback_switches_provider_and_marks_envelope(install_multi, monkeypatc
 def test_circuit_breaker_params_come_from_settings(install, monkeypatch) -> None:
     monkeypatch.setattr(settings, "llm_circuit_failure_threshold", 9)
     monkeypatch.setattr(settings, "llm_circuit_recovery_seconds", 120)
-    gw = gateway_module.LLMGateway()
+    gw = client_module.LLMClient()
     assert gw.circuit_breaker.failure_threshold == 9
     assert gw.circuit_breaker.recovery_timeout == 120
 
@@ -191,7 +191,7 @@ def test_circuit_breaker_params_come_from_settings(install, monkeypatch) -> None
 #  可插拔
 # ------------------------------------------------------------------ #
 def test_default_chain_order(install) -> None:
-    gw = gateway_module.LLMGateway()
+    gw = client_module.LLMClient()
     expected = ["guard", "observability", "fallback", "circuit_breaker", "budget_guard", "retry"]
     assert [m.name for m in gw.middlewares] == expected
     resp = gw.generate(PROMPT)
@@ -203,7 +203,7 @@ def test_chain_can_be_trimmed_by_settings(install, monkeypatch) -> None:
     monkeypatch.setattr(settings, "llm_transport_middlewares", "observability")
     sink = install
     sink.clear()
-    gw = gateway_module.LLMGateway()
+    gw = client_module.LLMClient()
     assert [m.name for m in gw.middlewares] == ["observability"]
 
     gw.primary_client.fail_times = 99
@@ -215,12 +215,12 @@ def test_chain_can_be_trimmed_by_settings(install, monkeypatch) -> None:
 def test_middlewares_can_be_injected_explicitly(install) -> None:
     from docs_seeker.infra.llm.middleware import ObservabilityMiddleware
 
-    gw = gateway_module.LLMGateway(middlewares=[ObservabilityMiddleware()])
+    gw = client_module.LLMClient(middlewares=[ObservabilityMiddleware()])
     assert [m.name for m in gw.middlewares] == ["observability"]
 
 
 def test_observability_injects_stream_options_only_when_streaming(install) -> None:
-    gw = gateway_module.LLMGateway()
+    gw = client_module.LLMClient()
     gw.generate(PROMPT)
     assert "stream_options" not in install[-1]
 

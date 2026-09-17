@@ -50,7 +50,7 @@ class ChatService:
         # Agentic M1：默认关闭（settings.agent_enabled）；开启后 agent 路径任何异常
         # 都回退下面的旧单轮管线，保证可灰度可回退
         self.agent_runner = agent_runner
-        # 护栏链路：边界挂载（可拒答/可改写）；与 gateway 内那处共用同一份配置
+        # 护栏链路：边界挂载（可拒答/可改写）；与 client 内那处共用同一份配置
         self.guards = guards or get_guard_chain()
 
     @observe(name=TRACE_NAME, capture_input=False, capture_output=False)
@@ -264,7 +264,7 @@ class ChatService:
         """检索文档正文注入扫描（**仅告警，不干预答案** —— 评审已决 2026-09-17）。
 
         RAG 里真正的注入通道是检索回来的文档正文：模式命中只记 warning，
-        答案照常生成（可用性优先）。与 gateway 内那处扫描同一个护栏配置。
+        答案照常生成（可用性优先）。与 client 内那处扫描同一个护栏配置。
         """
         texts = [getattr(chunk, "text", "") or "" for chunk in chunks or []]
         if any(texts):

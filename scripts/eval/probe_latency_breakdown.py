@@ -21,7 +21,7 @@ from docs_seeker.domain.interfaces.llm import LLMRequest
 from docs_seeker.domain.services.generator import Generator
 from docs_seeker.domain.services.query_decomposer import QueryDecomposer
 from docs_seeker.domain.services.rag_pipeline import RAGPipeline
-from docs_seeker.infra.llm.gateway import get_llm_gateway
+from docs_seeker.infra.llm.client import get_llm_client
 
 DEFAULT_Q = "我准备注册亚马逊卖家账户，身份验证时对上传的营业执照和法人身份证照片有什么具体要求？"
 
@@ -32,7 +32,7 @@ def main() -> int:
     ap.add_argument("--top-k", type=int, default=10)
     args = ap.parse_args()
 
-    gw = get_llm_gateway()
+    gw = get_llm_client()
     retriever = _retriever()
 
     llm_calls: list[dict] = []

@@ -19,7 +19,7 @@ from types import SimpleNamespace
 import pytest
 
 from docs_seeker.domain.interfaces.llm import LLMRequest, LLMResponse
-from docs_seeker.infra.llm import gateway as gateway_module
+from docs_seeker.infra.llm import client as client_module
 
 
 def _raw_response(content: str = "ok", finish: str = "stop", usage=None):
@@ -53,11 +53,11 @@ class _FakeOpenAI:
         self.chat = SimpleNamespace(completions=_Completions())
 
 
-def _gateway(monkeypatch, *, fail_times: int = 0, raw_factory=None) -> tuple[list[dict], gateway_module.LLMGateway]:
+def _gateway(monkeypatch, *, fail_times: int = 0, raw_factory=None) -> tuple[list[dict], client_module.LLMClient]:
     """构造接了假 OpenAI 客户端的网关；返回 (调用参数 sink, 网关)"""
     sink: list[dict] = []
-    monkeypatch.setattr(gateway_module, "OpenAI", lambda **kwargs: _FakeOpenAI(sink, fail_times, raw_factory))
-    return sink, gateway_module.LLMGateway()
+    monkeypatch.setattr(client_module, "OpenAI", lambda **kwargs: _FakeOpenAI(sink, fail_times, raw_factory))
+    return sink, client_module.LLMClient()
 
 
 # ------------------------------------------------------------------ #
@@ -182,7 +182,7 @@ def test_streaming_response_keeps_raw_stream_and_empty_text(monkeypatch) -> None
 def test_fallback_is_visible_in_envelope(monkeypatch) -> None:
     monkeypatch.setenv("FALLBACK_API_KEY", "fk")
     monkeypatch.setenv("FALLBACK_BASE_URL", "https://fallback.example/v1")
-    monkeypatch.setattr(gateway_module.time, "sleep", lambda _s: None)  # 跳过退避等待
+    monkeypatch.setattr(client_module.time, "sleep", lambda _s: None)  # 跳过退避等待
 
     sink: list[dict] = []
     calls = {"n": 0}
@@ -192,8 +192,8 @@ def test_fallback_is_visible_in_envelope(monkeypatch) -> None:
         # 第一次构造 = 主客户端（永远失败）；第二次 = 备用客户端（成功）
         return _FakeOpenAI(sink, fail_times=99 if calls["n"] == 1 else 0)
 
-    monkeypatch.setattr(gateway_module, "OpenAI", factory)
-    gw = gateway_module.LLMGateway()
+    monkeypatch.setattr(client_module, "OpenAI", factory)
+    gw = client_module.LLMClient()
     resp = gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}]))
 
     assert resp.fallback_used is True
@@ -205,7 +205,7 @@ def test_fallback_is_visible_in_envelope(monkeypatch) -> None:
 def test_primary_failure_without_fallback_raises(monkeypatch) -> None:
     monkeypatch.delenv("FALLBACK_API_KEY", raising=False)
     monkeypatch.delenv("FALLBACK_BASE_URL", raising=False)
-    monkeypatch.setattr(gateway_module.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(client_module.time, "sleep", lambda _s: None)
     _sink, gw = _gateway(monkeypatch, fail_times=99)
-    with pytest.raises(gateway_module.AllModelsFailedError):
+    with pytest.raises(client_module.AllModelsFailedError):
         gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}]))

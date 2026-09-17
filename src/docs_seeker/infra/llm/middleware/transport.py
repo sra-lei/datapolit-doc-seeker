@@ -1,7 +1,7 @@
 """Transport 级 middleware：观测 / 降级 / 熔断 / 重试。
 
-这些策略原本全部内联在 ``LLMGateway.generate`` 里（重试循环、熔断计数、主备切换
-写死在一个函数中），Phase 1 起拆成可插拔插件：网关只保留「组 payload → 调 SDK →
+这些策略原本全部内联在 ``LLMClient.generate`` 里（重试循环、熔断计数、主备切换
+写死在一个函数中），Phase 1 起拆成可插拔插件：客户端只保留「组 payload → 调 SDK →
 包信封」，策略由链路组合决定（见 ``LLM_TRANSPORT_MIDDLEWARES``）。
 """
 

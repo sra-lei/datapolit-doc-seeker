@@ -1,6 +1,6 @@
-"""LLM 网关单元测试（不依赖真实 API）：超时与重试口径。
+"""LLM 客户端单元测试（不依赖真实 API）：超时与重试口径。
 
-背景：网关原先硬编码 `timeout=15`（普通模型口径），推理模型的响应时间随题目
+背景：客户端原先硬编码 `timeout=15`（普通模型口径），推理模型的响应时间随题目
 波动（实测 10~60s），长答案会被直接打成超时失败 → 超时必须配置化且默认够大。
 """
 
@@ -12,9 +12,7 @@ import pytest
 
 from docs_seeker.core.config import settings
 from docs_seeker.domain.interfaces.llm import LLMRequest
-from docs_seeker.infra import llm as llm_pkg
-
-gateway_module = llm_pkg.gateway
+from docs_seeker.infra.llm import client as client_module
 
 
 def _response(content: str, finish: str = "stop"):
@@ -44,25 +42,25 @@ def patch_client(monkeypatch):
     sink: list[dict] = []
 
     def _install(fail_times: int = 0):
-        monkeypatch.setattr(gateway_module, "OpenAI", lambda **kwargs: _FakeOpenAI(sink, fail_times))
+        monkeypatch.setattr(client_module, "OpenAI", lambda **kwargs: _FakeOpenAI(sink, fail_times))
         return sink
 
     return _install
 
 
-def test_gateway_uses_configured_timeout(patch_client) -> None:
+def test_client_uses_configured_timeout(patch_client) -> None:
     sink = patch_client()
-    gw = gateway_module.LLMGateway()
-    gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], max_tokens=100))
+    client = client_module.LLMClient()
+    client.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], max_tokens=100))
     assert sink[0]["timeout"] == settings.llm_timeout_seconds
     assert settings.llm_timeout_seconds >= 60  # 推理模型兜底：不得回落到 15s 这类短超时
 
 
-def test_gateway_timeout_override_wins(patch_client) -> None:
+def test_client_timeout_override_wins(patch_client) -> None:
     """判断类调用传短超时：覆盖全局 120s，避免 agent 循环被卡死"""
     sink = patch_client()
-    gw = gateway_module.LLMGateway()
-    gw.generate(
+    client = client_module.LLMClient()
+    client.generate(
         LLMRequest(
             messages=[{"role": "user", "content": "x"}], max_tokens=100, timeout=settings.llm_judge_timeout_seconds
         )
@@ -70,10 +68,10 @@ def test_gateway_timeout_override_wins(patch_client) -> None:
     assert sink[0]["timeout"] == settings.llm_judge_timeout_seconds
 
 
-def test_gateway_retries_then_succeeds(patch_client, monkeypatch) -> None:
+def test_client_retries_then_succeeds(patch_client, monkeypatch) -> None:
     sink = patch_client(fail_times=1)
-    monkeypatch.setattr(gateway_module.time, "sleep", lambda _s: None)  # 跳过退避等待
-    gw = gateway_module.LLMGateway()
-    gw.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], max_tokens=100))
+    monkeypatch.setattr(client_module.time, "sleep", lambda _s: None)  # 跳过退避等待
+    client = client_module.LLMClient()
+    client.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], max_tokens=100))
     assert len(sink) == 2  # 首次超时 → 重试一次成功
     assert all(call["timeout"] == settings.llm_timeout_seconds for call in sink)

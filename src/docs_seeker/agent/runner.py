@@ -1,9 +1,9 @@
 """Agent 循环编排（M1）。
 
 数据流：思考(LLM) → 动作 JSON → 本地执行工具 → observation 回灌 → … → final → 成文。
-本层只做编排与预算治理；重试/熔断/超时/降级在 LLMGateway，不在这里重复。
+本层只做编排与预算治理；重试/熔断/超时/降级在 LLMClient，不在这里重复。
 
-回退契约：任何编排层异常（AgentError、gateway 的 AllModelsFailedError 等）都向上抛，
+回退契约：任何编排层异常（AgentError、client 的 AllModelsFailedError 等）都向上抛，
 由 chat_service 捕获后回退旧单轮管线。步数耗尽不回退——基于已收集证据成文/拒答。
 """
 
