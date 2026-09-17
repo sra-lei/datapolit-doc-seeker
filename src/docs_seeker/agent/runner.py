@@ -93,6 +93,9 @@ class AgentRunner:
                     name="agent-decide",
                     model=None,  # 判断始终走 LLM_MODEL（推理模型）
                     timeout=settings.llm_judge_timeout_seconds,
+                    # 决策走推理模型 + 小预算（AGENT_JUDGE_MAX_TOKENS），是「思考吃满预算 →
+                    # 空正文」的高发组合，与生成 / 改写两处对齐挂预算兜底
+                    meta={"budget_guard": True},
                 )
             )
             raw = parse_llm_response(resp).content

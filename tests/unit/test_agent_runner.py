@@ -36,6 +36,7 @@ class FakeLLM:
                 "max_tokens": request.max_tokens,
                 "temperature": request.temperature,
                 "messages": [dict(m) for m in request.messages],
+                "meta": dict(request.meta),
             }
         )
         if request.name == "agent-compose":
@@ -91,6 +92,9 @@ def test_happy_path_retrieve_then_final(monkeypatch):
     assert decide_call["timeout"] == 30.0
     assert compose_call["model"] == "deepseek-chat"
     assert compose_call["timeout"] is None
+    # 决策调用挂预算兜底：推理模型 + 小预算（AGENT_JUDGE_MAX_TOKENS）是「思考吃满预算 →
+    # 空正文」的高发组合，与生成 / 改写两处对齐
+    assert decide_call["meta"].get("budget_guard") is True
     assert retriever.calls[0]["meta_filter"] is None
 
 

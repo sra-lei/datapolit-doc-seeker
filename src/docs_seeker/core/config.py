@@ -103,6 +103,19 @@ class Settings(BaseSettings):
     # 循环内判断调用短超时复用 llm_judge_timeout_seconds（见上）
     agent_judge_max_tokens: int = 500  # 思考/动作 JSON 的生成长度
     agent_evidence_char_budget: int = 12000  # 成文前累计证据的总字符预算
+    # agent 路径失败时是否回退旧单轮管线：
+    #   None（默认）= 按 environment 推导 —— production 回退、其他环境不回退；
+    #   显式 true/false 可覆盖（环境变量 AGENT_FALLBACK_ENABLED）。
+    # 生产以可用性优先（回退保证有答案）；开发期默认不回退，让 agent 的失败**显式暴露**，
+    # 而不是被旧管线的成功悄悄掩盖（否则 agentic 的 A/B 根本归因不了）。
+    agent_fallback_enabled: bool | None = None
+
+    @property
+    def agent_fallback_to_pipeline(self) -> bool:
+        """解析后的「是否回退旧管线」（显式配置优先，否则按 environment 推导）"""
+        if self.agent_fallback_enabled is not None:
+            return self.agent_fallback_enabled
+        return self.environment.lower() == "production"
 
 
 settings = Settings()

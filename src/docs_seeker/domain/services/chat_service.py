@@ -114,6 +114,14 @@ class ChatService:
                         f"sufficient={ar.sufficient}"
                     )
                 except Exception as e:  # noqa: BLE001 — 回退契约：编排/网关任何异常都落回旧管线
+                    if not settings.agent_fallback_to_pipeline:
+                        # 开发期默认不回退：让 agent 的失败显式暴露，而不是被旧管线的成功掩盖
+                        # （生产默认回退，可用性优先；开关见 AGENT_FALLBACK_ENABLED）
+                        logger.error(
+                            f"Agent 路径失败且未启用回退（environment={settings.environment}）: "
+                            f"{type(e).__name__}: {e}"
+                        )
+                        raise
                     logger.warning(f"Agent 路径失败，回退旧单轮管线: {type(e).__name__}: {e}")
                     answer, confidence, chunks, sub_questions = self.pipeline.run(
                         question, top_k=top_k, conversation_history=history
