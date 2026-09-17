@@ -6,7 +6,7 @@ docs-seeker - 查询分解
 from loguru import logger
 
 from docs_seeker.core.config import prompts, settings
-from docs_seeker.domain.interfaces.llm import LLMProvider, LLMRequest
+from docs_seeker.domain.interfaces.llm import LLMProvider, LLMRequest, LLMResponse
 from docs_seeker.domain.models.query import Query
 from docs_seeker.infra.llm.gateway import get_llm_gateway
 
@@ -34,13 +34,9 @@ class QueryDecomposer:
             )
         )
 
-    def _split_lines(self, response) -> list[str]:
+    def _split_lines(self, response: LLMResponse) -> list[str]:
         """从响应取正文并按行切分（空正文 → 空列表）。"""
-        try:
-            content = response.choices[0].message.content or ""
-        except (AttributeError, IndexError, TypeError):
-            return []
-        return [q.strip() for q in content.strip().split("\n") if q.strip()]
+        return [q.strip() for q in response.text.strip().split("\n") if q.strip()]
 
     def decompose(self, question: str) -> Query:
         """分解查询，返回 Query（含子问题列表，含原始问题）"""
@@ -53,7 +49,7 @@ class QueryDecomposer:
             if not sub_questions and settings.llm_retry_max_tokens > budget:
                 # 推理模型把预算吃在 reasoning 上 → 正文为空。放大预算重试一次，
                 # 不要静默退化成单路检索（历史上正是这样丢掉了查询分解）。
-                finish = getattr(getattr(response, "choices", [None])[0], "finish_reason", None)
+                finish = response.finish_reason
                 logger.warning(
                     f"查询分解正文为空（finish={finish}, max_tokens={budget}）"
                     f"——疑似 reasoning 吃满预算，用 max_tokens={settings.llm_retry_max_tokens} 重试一次"

@@ -1,24 +1,39 @@
-"""把 LLMGateway 返回的 OpenAI 风格响应映射为中立的 LLMMessage。
+"""把网关返回的 ``LLMResponse`` 映射为中立的 LLMMessage。
 
-隔离 vendor 字段（DeepSeek reasoning_content、未来 native tool_calls），
-runner 只依赖 LLMMessage。
+vendor 字段（DeepSeek reasoning_content、native tool_calls）在
+``LLMResponse.from_raw`` 已隔离，这里只做「信封 → LLMMessage」的形状转换，
+runner 不直接碰 provider 原始结构。
 """
 
 from __future__ import annotations
 
-from typing import Any
-
 from docs_seeker.agent.models import LLMMessage
+from docs_seeker.domain.interfaces.llm import LLMResponse
 
 
-def parse_llm_response(response: Any) -> LLMMessage:
-    choice = response.choices[0]
-    message = choice.message
-    content = (getattr(message, "content", None) or "").strip()
-    reasoning = getattr(message, "reasoning_content", None)
-    raw_tool_calls = getattr(message, "tool_calls", None) or []
+def parse_llm_response(response: LLMResponse) -> LLMMessage:
+    return LLMMessage(
+        content=response.text,
+        reasoning=response.reasoning,
+        tool_calls=_normalize_tool_calls(response.tool_calls),
+        finish_reason=response.finish_reason,
+    )
+
+
+def _normalize_tool_calls(raw_tool_calls) -> list[dict]:
+    """归一化 tool_calls（兼容对象式与 dict 式两种 provider 返回）"""
     tool_calls: list[dict] = []
-    for tc in raw_tool_calls:
+    for tc in raw_tool_calls or []:
+        if isinstance(tc, dict):
+            fn = tc.get("function") or {}
+            tool_calls.append(
+                {
+                    "id": tc.get("id"),
+                    "name": fn.get("name") if isinstance(fn, dict) else None,
+                    "arguments": fn.get("arguments") if isinstance(fn, dict) else None,
+                }
+            )
+            continue
         fn = getattr(tc, "function", None)
         tool_calls.append(
             {
@@ -27,9 +42,4 @@ def parse_llm_response(response: Any) -> LLMMessage:
                 "arguments": getattr(fn, "arguments", None) if fn else None,
             }
         )
-    return LLMMessage(
-        content=content,
-        reasoning=reasoning,
-        tool_calls=tool_calls,
-        finish_reason=getattr(choice, "finish_reason", None),
-    )
+    return tool_calls

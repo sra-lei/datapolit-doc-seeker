@@ -18,7 +18,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from docs_seeker.core.config import settings
-from docs_seeker.domain.interfaces.llm import LLMRequest
+from docs_seeker.domain.interfaces.llm import LLMRequest, LLMResponse
 from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.domain.models.query import Query
 from docs_seeker.domain.services.chat_service import ChatService
@@ -42,15 +42,16 @@ class ScriptedLLM:
         self.script = list(script)
         self.calls: list[dict] = []
 
-    def generate(self, request: LLMRequest):
+    def generate(self, request: LLMRequest) -> LLMResponse:
         self.calls.append(
             {"max_tokens": request.max_tokens, "stream": request.stream, "name": request.name, "model": request.model}
         )
         content, finish = self.script[min(len(self.calls) - 1, len(self.script) - 1)]
         if request.stream:
             # 流式：产出 OpenAI 风格 chunk（只带 delta.content）
-            return iter([SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=content))])])
-        return _response(content, finish)
+            chunks = [SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=content))])]
+            return LLMResponse.from_raw(iter(chunks), stream=True)
+        return LLMResponse.from_raw(_response(content, finish))
 
     @property
     def budgets(self) -> list[int]:

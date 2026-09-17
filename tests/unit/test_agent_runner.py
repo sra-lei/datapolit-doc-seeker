@@ -9,7 +9,7 @@ import pytest
 from docs_seeker.agent.runner import AgentError, AgentRunner
 from docs_seeker.agent.tools import default_tools
 from docs_seeker.core.config import settings
-from docs_seeker.domain.interfaces.llm import LLMRequest
+from docs_seeker.domain.interfaces.llm import LLMRequest, LLMResponse
 from docs_seeker.domain.models.chunk import Chunk
 
 
@@ -27,7 +27,7 @@ class FakeLLM:
         self._compose = compose_answer
         self.calls: list[dict] = []
 
-    def generate(self, request: LLMRequest):
+    def generate(self, request: LLMRequest) -> LLMResponse:
         self.calls.append(
             {
                 "name": request.name,
@@ -39,8 +39,8 @@ class FakeLLM:
             }
         )
         if request.name == "agent-compose":
-            return _resp(self._compose)
-        return _resp(self._queue.pop(0))
+            return LLMResponse.from_raw(_resp(self._compose))
+        return LLMResponse.from_raw(_resp(self._queue.pop(0)))
 
 
 class FakeRetriever:

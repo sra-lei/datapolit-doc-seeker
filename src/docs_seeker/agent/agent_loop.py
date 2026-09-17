@@ -36,20 +36,15 @@ def chat(question: str):
             name="agent",
             model=settings.llm_generate_model or None,
         )
-        stream = llm.generate(message)
+        response = llm.generate(message)
         produced = False
 
         try:
-            for chunk in stream:
-                # gateway 流式开启 include_usage：最后一个 chunk 为 usage 包（choices 为空），
-                # 需与 generator._extract_delta 一致做结构保护，避免 IndexError
-                try:
-                    delta = chunk.choices[0].delta.content or ""
-                except (AttributeError, IndexError, TypeError):
-                    delta = ""
-                if delta:
-                    produced = True
-                    yield delta
+            # 正文提取走 LLMResponse.iter_text()：兼容 include_usage 末包（choices 为空）
+            # 与 reasoning 模型先出 reasoning_content 的情形
+            for delta in response.iter_text():
+                produced = True
+                yield delta
             if not produced:
                 logger.warning(
                     f"流式生成正文为空（max_tokens={settings.llm_generate_max_tokens}）"

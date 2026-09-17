@@ -3,7 +3,7 @@
 from loguru import logger
 
 from docs_seeker.core.config import prompts, settings
-from docs_seeker.domain.interfaces.llm import LLMProvider, LLMRequest
+from docs_seeker.domain.interfaces.llm import LLMProvider, LLMRequest, LLMResponse
 from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.infra.llm.gateway import get_llm_gateway
 
@@ -45,15 +45,17 @@ class Generator:
         stream: bool = False,
         name: str = "generate-response",
         timeout: float | None = None,
-    ):
-        """单次调用 LLM 网关（统一温度口径；name 供 Langfuse generation 观测定位）。
+    ) -> LLMResponse:
+        """单次调用 LLM 网关，返回 ``LLMResponse`` 信封。
 
         温度取自 ``LLM_TEMPERATURE``（默认 0.3 = 历史口径；评估/A-B 用 0，
         否则采样噪声会盖过待测改动的量级）；模型可取 ``LLM_GENERATE_MODEL``
         覆盖（分层路由：生成走非推理模型；空 = 沿用 LLM_MODEL，旧行为）；
         ``timeout`` 非空时覆盖全局超时（判断类调用传短超时快速失败）。
+
+        降级（``fallback_used``）不再静默：这里记 warning，便于评估归因。
         """
-        return self.llm.generate(
+        response = self.llm.generate(
             LLMRequest(
                 messages=messages,
                 max_tokens=max_tokens,
@@ -64,6 +66,9 @@ class Generator:
                 timeout=timeout,
             )
         )
+        if response.fallback_used:
+            logger.warning(f"本次调用走了降级模型（name={name}, provider={response.provider}）")
+        return response
 
     def _call_with_budget_guard(
         self, messages: list[dict], name: str = "generate-response", timeout: float | None = None
@@ -76,14 +81,14 @@ class Generator:
         """
         budget = settings.llm_generate_max_tokens
         response = self._call(messages, budget, name=name, timeout=timeout)
-        answer, finish_reason = _extract_answer(response)
+        answer, finish_reason = response.text, response.finish_reason
         if not answer and finish_reason == "length" and settings.llm_retry_max_tokens > budget:
             logger.warning(
                 f"生成被截断且正文为空（max_tokens={budget}, finish=length）"
                 f"——疑似 reasoning 吃满预算，用 max_tokens={settings.llm_retry_max_tokens} 重试一次"
             )
             response = self._call(messages, settings.llm_retry_max_tokens, name=f"{name}-budget-retry", timeout=timeout)
-            answer, finish_reason = _extract_answer(response)
+            answer, finish_reason = response.text, response.finish_reason
         if not answer:
             logger.warning(
                 f"生成正文为空（finish={finish_reason}, max_tokens={budget}）"
@@ -111,7 +116,7 @@ class Generator:
         try:
             if max_tokens is not None:
                 response = self._call(messages, max_tokens, timeout=timeout)
-                answer, _ = _extract_answer(response)
+                answer = response.text
             else:
                 answer = self._call_with_budget_guard(messages, timeout=timeout)
             confidence = compute_confidence(answer, docs)
@@ -125,44 +130,21 @@ class Generator:
         """流式生成：逐段产出增量文本（str）。
 
         异常不在此捕获（由调用方决定如何收尾），最后一段文本产出后自然结束。
-        reasoning 模型会先输出 reasoning_content（本函数只取 delta.content）；预算
-        不足时正文可能整段为空 —— 此时记 warning，避免再次静默退化。
+        正文提取走 ``LLMResponse.iter_text()``（兼容 reasoning 模型先出
+        reasoning_content、以及 include_usage 末包 choices 为空）；预算不足时正文
+        可能整段为空 —— 此时记 warning，避免再次静默退化。
         """
         messages = self._build_messages(question, docs, conversation_history)
-        stream = self._call(messages, settings.llm_generate_max_tokens, stream=True)
+        response = self._call(messages, settings.llm_generate_max_tokens, stream=True)
         produced = False
-        for chunk in stream:
-            delta = _extract_delta(chunk)
-            if delta:
-                produced = True
-                yield delta
+        for delta in response.iter_text():
+            produced = True
+            yield delta
         if not produced:
             logger.warning(
                 f"流式生成正文为空（max_tokens={settings.llm_generate_max_tokens}）"
                 "——疑似 reasoning 吃满预算，检查 LLM_GENERATE_MAX_TOKENS"
             )
-
-
-def _extract_answer(response) -> tuple[str, str | None]:
-    """从 OpenAI 风格响应取 (正文, finish_reason)；结构异常返回 ("", None)。
-
-    reasoning 模型的思考内容在 ``message.reasoning_content``，**不能**当正文用：
-    这里只取 ``message.content``，为空即如实返回空串。
-    """
-    try:
-        choice = response.choices[0]
-    except (AttributeError, IndexError, TypeError):
-        return "", None
-    content = getattr(choice.message, "content", None) or ""
-    return content.strip(), getattr(choice, "finish_reason", None)
-
-
-def _extract_delta(chunk) -> str:
-    """从 OpenAI 风格流式 chunk 中提取增量文本（兼容 reasoning 模型先出 reasoning_content 的情形）"""
-    try:
-        return chunk.choices[0].delta.content or ""
-    except (AttributeError, IndexError, TypeError):
-        return ""
 
 
 def compute_confidence(answer: str, docs: list[Chunk]) -> str:

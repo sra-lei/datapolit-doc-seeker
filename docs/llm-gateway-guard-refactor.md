@@ -266,3 +266,25 @@ domain/services/
 2. `infra/llm/gateway.py`：`call_kwargs` 硬编码白名单 → 「常用字段过滤 `None` + `extra` 合并 + `meta` 剥离」；返回包 `LLMResponse`。
 3. 同步迁移调用点：`Generator` / `QueryDecomposer` / `AgentRunner` / `agent_loop` + 全部鸭子类型替身（`ScriptedLLM` / `RecordingLLM` / `_ScriptedGenerator`）。
 4. 新增单测：`extra` 透传、`None` 不下发、`meta` 不进 payload、`raw` 保真、`fallback_used` 标记。
+
+---
+
+## 9. 落地记录
+
+### Phase 0（参数透传 + 返回信封）✅ 2026-09-17
+
+- **改动**：
+  - `LLMRequest` 增 `extra`（逃生舱，任意 provider 参数原样透传）/ `meta`（框架参数，**永不进 payload**）；`None` 字段不下发；
+  - 新增 `LLMResponse` 信封：`text` / `raw`（原始响应保真）/ `finish_reason` / `usage` / `reasoning` / `tool_calls` / `provider` / `fallback_used` / `attempts` / `latency_ms` / `applied_middlewares` / `trace_id`；流式 `.text` 置空 + `iter_text()`；
+  - `LLMProvider.generate` 返回类型 `Any` → `LLMResponse`；
+  - **vendor 结构解析收敛**到 `LLMResponse.from_raw` —— 全仓仅 `domain/interfaces/llm.py` 解 `.choices`（原散落在 generator / decomposer / adapter 三处）；
+  - 网关 `call_kwargs` 硬编码白名单 → 「常用字段过滤 `None` + `extra` 合并 + `_provider_extras` 注入框架参数」；
+  - 降级不再静默：`fallback_used` / `provider` 进信封，Generator 侧记 warning。
+- **迁移调用点**：`Generator` / `QueryDecomposer` / `AgentRunner`（经 `adapter.parse_llm_response`）/ `agent_loop` + 3 个假 LLM 替身（`ScriptedLLM` / `RecordingLLM` / `FakeLLM`）。
+- **验证**：
+  - `ruff check src tests` 通过；
+  - `pytest tests/unit` **107 passed**（基线 95 + 新增 12，含 `tests/unit/test_llm_passthrough.py`）；
+  - `scripts/smoke_gateway.py` 真实 API 冒烟三条全过：普通调用（正文/usage/raw 均取到）、`extra={"top_p": 0.5}` 被真实 provider 接受、流式 `.text` 为空 + `iter_text()` 拼接正确。
+- **冒烟副产品**：预算给小（16 token）时推理模型正文为空、`finish_reason=length` —— 真实调用复现了单测里的场景，信封如实上报而非静默吞掉。
+- **未做**（后续 Phase）：middleware 骨架 / guard 双插槽 / 死代码清理 / 错误链修复 / 评估回归。
+
