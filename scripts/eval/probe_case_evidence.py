@@ -67,6 +67,7 @@ def main() -> int:
 
     norm = judge_lib._norm
     keyword_list = case.get("expected_keywords") or []
+    is_abstain = case.get("expected_answer_type") == "abstain"
     question = case["question"]
 
     gw = get_llm_gateway()
@@ -78,6 +79,15 @@ def main() -> int:
 
     def check(tag: str, evidence_texts: list[str], compose_input: str, answer: str) -> None:
         print(f"【{tag}】")
+        if is_abstain:
+            score, detail = judge_lib.judge_abstain(answer)
+            print(
+                f"   拒答判定：{'✅ 正确拒答' if score >= 0.8 else '❌ 硬编了（该拒答却作答）'} | detail={detail} | "
+                f"答案 {len(answer)} 字"
+            )
+            print(f"   答案开头：{answer[:180]!r}")
+            print(f"   证据 {len(evidence_texts)} 条 | 成文输入 {len(compose_input)} 字")
+            return
         for kw in keyword_list:
             in_ev = any(norm(kw) in norm(t) for t in evidence_texts)
             in_ci = norm(kw) in norm(compose_input)
@@ -136,6 +146,17 @@ def main() -> int:
             r = AgentRunner(llm=gw, retriever=retriever).run(question, top_k=args.top_k)
             el = time.time() - t0
             compose_input = AgentRunner._format_evidence(list(r.evidence))
+            if is_abstain:
+                score, detail = judge_lib.judge_abstain(r.answer)
+                ok = score >= 0.8
+                print(
+                    f"   第 {i + 1} 次: {'✅ 正确拒答' if ok else '❌ 硬编了'} | 步数 {len(r.steps)} 证据 {len(r.evidence)} | "
+                    f"{el:4.1f}s | sufficient={r.sufficient} | detail={detail}"
+                )
+                if not ok:
+                    print(f"      ↳ 硬编答案开头：{r.answer[:220]!r}")
+                hits += ok
+                continue
             per_kw = {kw: norm(kw) in norm(r.answer) for kw in keyword_list}
             ok = all(per_kw.values())
             hits += ok
