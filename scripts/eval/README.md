@@ -9,6 +9,8 @@
 scripts/eval/
 ├── run_local_baseline.py   # 跑一轮：逐题问答 + 子串判分，结果落 JSON
 ├── run_agent_eval.py       # 跑一轮（AgentRunner / Agentic M1 路径）+ agent 专属指标
+├── probe_latency_breakdown.py  # 单题延迟分解（按 LLM/检索调用点；必先预热检索）
+├── probe_case_evidence.py      # 单题证据链定位（①证据→②成文输入→③答案，逐环找断点）
 ├── compare_eval_runs.py    # 跨轮对照：逐题分数矩阵 + 摆幅/总分
 ├── cases/                  # 离线用例（纳入 git，跨机器共享）
 │   └── eval-set-v2.json    #   亚马逊卖家侧语料用例（出题后提交于此）
