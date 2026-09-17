@@ -13,7 +13,7 @@ from docs_seeker.domain.services.guards import ANSWER_CTX, DOCUMENT_CTX, USER_IN
 from docs_seeker.domain.services.query_decomposer import QueryDecomposer
 from docs_seeker.domain.services.rag_pipeline import RAGPipeline
 from docs_seeker.domain.services.usage import UsageTracker
-from docs_seeker.infra.tracing import FEATURE_TAG, TRACE_NAME
+from docs_seeker.infra.tracker.langfuse import FEATURE_TAG, TRACE_NAME
 
 # 写入语义缓存 / 组装响应时保留的字段（与 SourceDoc 对齐）
 CACHE_FIELDS = ("id", "text", "source", "chapter", "chapter_title", "section", "section_title", "score", "sources")

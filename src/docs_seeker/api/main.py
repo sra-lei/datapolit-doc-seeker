@@ -13,7 +13,7 @@ from docs_seeker.core.config import settings
 from docs_seeker.core.metrics import metrics_response
 from docs_seeker.domain.services.top_warmup import get_top_warmup
 from docs_seeker.infra.logger.logging import setup_logging
-from docs_seeker.infra.tracing import shutdown_langfuse
+from docs_seeker.infra.tracker.langfuse import shutdown_langfuse
 
 
 @asynccontextmanager
