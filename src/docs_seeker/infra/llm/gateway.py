@@ -28,6 +28,7 @@ from docs_seeker.domain.interfaces.llm import LLMProvider, LLMRequest, LLMRespon
 from docs_seeker.infra.llm.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError, CircuitState
 from docs_seeker.infra.llm.errors import AllModelsFailedError
 from docs_seeker.infra.llm.middleware import (
+    BudgetGuardMiddleware,
     CircuitBreakerMiddleware,
     FallbackMiddleware,
     LLMCallContext,
@@ -168,7 +169,10 @@ def default_transport_middlewares(gateway: LLMGateway) -> list[LLMMiddleware]:
     """默认 transport 链（列表顺序 = 外层到内层）。
 
     ``observability``（观测参数）→ ``fallback``（主备降级）→ ``circuit_breaker``
-    （每个逻辑调用记一次成败）→ ``retry``（同 provider 内退避重试）。
+    （每个逻辑调用记一次成败）→ ``budget_guard``（截断空正文放大预算重试一次）
+    → ``retry``（同 provider 内退避重试）。
+
+    ``budget_guard`` 排在 ``retry`` **外层**：放大预算那次调用仍享受错误重试。
 
     可用 ``LLM_TRANSPORT_MIDDLEWARES`` 覆盖（逗号分隔的名字，空 = 默认链）：
     例 ``LLM_TRANSPORT_MIDDLEWARES=observability,retry`` 即关掉降级与熔断。
@@ -177,6 +181,7 @@ def default_transport_middlewares(gateway: LLMGateway) -> list[LLMMiddleware]:
         "observability": ObservabilityMiddleware,
         "fallback": lambda: FallbackMiddleware(lambda: gateway.fallback_client is not None),
         "circuit_breaker": lambda: CircuitBreakerMiddleware(gateway.circuit_breaker),
+        "budget_guard": BudgetGuardMiddleware,
         "retry": RetryMiddleware,
     }
     names = [n.strip() for n in (settings.llm_transport_middlewares or "").split(",") if n.strip()]

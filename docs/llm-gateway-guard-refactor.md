@@ -226,7 +226,7 @@ domain/services/
 |---|---|---|---|
 | **0** | `LLMRequest` 加 `extra` / `meta`；`None` 不下发；`LLMResponse` 信封**直接启用**（无兼容开关），调用点 + 鸭子替身一次性迁移 | 新单测：`extra` 原样到达 SDK、`None` 字段不出现、`meta` 不进 payload、`raw` 与原始响应同一对象 | 单 commit 回滚（`git revert`） |
 | **1** | Middleware 骨架 + `Transport` 级把 retry/circuit/fallback/observability 从 gateway 内联逻辑搬成插件 | 现有 `test_llm_gateway.py` 3 项全绿 + 新增「fallback_used 标记」用例 | **一步到位**（评审已决）：无内联回退路径，回退靠 `git revert`；运行期可用 `LLM_TRANSPORT_MIDDLEWARES` 裁剪链路 |
-| **2** | `BudgetGuardMiddleware` 收编 generator / decomposer 的重复兜底 | `test_llm_budget_guard.py` 11 项全绿，调用次数与预算序列不变 | 保留原函数，开关切换 |
+| **2** | `BudgetGuardMiddleware` 收编 generator / decomposer 的重复兜底 | `test_llm_budget_guard.py` 全部用例的调用次数与预算序列不变 + 新增「按请求启用」用例 | 回退靠 `git revert`；运行期可用 `LLM_TRANSPORT_MIDDLEWARES` 去掉 `budget_guard` |
 | **3** | Guard 全部 middleware 化并按评审**挂两处**（pipeline 边界 + gateway 内）；`chat_service` / `top_warmup` 只留一行链式调用；**新增文档正文注入扫描（仅告警）** | `test_guard.py` 全绿 + 新用例「文档内含注入指令 → 有告警日志、答案不变」+「agent 内部 LLM 调用经过 guard 链」 | 开关切回直接函数调用 |
 | **4** | 清理死代码（`CircuitBreaker.call` 改为真用）、单例改 deps 注入、错误链修复 | 全量单测 + 端到端一问（`/v1/chat`） | — |
 | **5** | 文档 + 评估（口径不变：`LLM_TEMPERATURE=0` + `LLM_GENERATE_MODEL=deepseek-chat`） | 22 题均分不低于当前 21/22 基线 | — |
@@ -302,4 +302,23 @@ domain/services/
   3. `stream_options` 注入从网关硬编码挪到 `observability` middleware（写 `request.extra`，它本就是 provider 参数）。
 - **验证**：`ruff check src tests` 通过；`pytest tests/unit` **116 passed**（107 + 新增 `test_llm_middleware.py` 9 项：重试成功 / 不可重试快失败 / 熔断打开后不打 SDK / 半开恢复 / 降级标记与模型 / 默认链路顺序 / 链路裁剪 / 显式注入 / stream_options 条件注入）；`scripts/smoke_gateway.py` 真实 API 三条全过（与 Phase 0 结果一致）。
 - **未做**：`budget_guard` 收编（Phase 2）/ guard 双插槽（Phase 3）/ 错误模型与死代码收尾（Phase 4）/ 评估回归（Phase 5）。
+
+### Phase 2（预算兜底收编成 `BudgetGuardMiddleware`）✅ 2026-09-17
+
+- **新增 middleware**：`BudgetGuardMiddleware`（`middleware/transport.py`）。默认链变为
+  `observability → fallback → circuit_breaker → budget_guard → retry`
+  （`budget_guard` 在 `retry` **外层**：放大预算那次调用仍享受错误重试）。
+- **按请求启用**：`request.meta["budget_guard"]=True`。由调用方决定预算语义 —— 生成走
+  `LLM_GENERATE_MAX_TOKENS` + 兜底；显式传 `max_tokens` 的调用不带该标记，保持
+  「单次调用、不放大」的旧口径（`test_explicit_max_tokens_keeps_single_call` 仍锁着）。
+- **收编重复**：generator / query_decomposer 里各自那份约 15 行「截断空返回 → 放大预算
+  重试一次」删除，两处只保留应用层决策（仍为空 → 记 warning / 回退原问题单路检索）。
+- **测试重构（诚实记录）**：`test_llm_budget_guard.py` 中原先注入裸的假 LLM
+  （`ScriptedLLM`），而机制搬进 middleware 后裸替身**测不到链路** → 改为「真实网关 +
+  假 OpenAI 客户端」驱动；**断言口径不变**（调用次数与预算序列逐条一致），并新增 2 项
+  「按请求启用」用例（不带标记不放大 / 放大预算不大于原预算时不重试）。
+- **验证**：`ruff` 通过；`pytest` **119 passed**；真实 API 冒烟新增第 4 条端到端证明 ——
+  16 token 打真实推理模型，**SDK 调用预算序列 `[16, 16000]`**、正文 `'收到'`，同时打出
+  middleware 的「正文为空且被截断…重试一次」告警。只看正文会有歧义（小预算也可能碰巧
+  吐出正文），所以该用例以**实际 SDK 调用序列**判定。
 

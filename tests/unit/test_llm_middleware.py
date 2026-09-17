@@ -192,9 +192,10 @@ def test_circuit_breaker_params_come_from_settings(install, monkeypatch) -> None
 # ------------------------------------------------------------------ #
 def test_default_chain_order(install) -> None:
     gw = gateway_module.LLMGateway()
-    assert [m.name for m in gw.middlewares] == ["observability", "fallback", "circuit_breaker", "retry"]
+    expected = ["observability", "fallback", "circuit_breaker", "budget_guard", "retry"]
+    assert [m.name for m in gw.middlewares] == expected
     resp = gw.generate(PROMPT)
-    assert resp.applied_middlewares == ["observability", "fallback", "circuit_breaker", "retry"]
+    assert resp.applied_middlewares == expected
 
 
 def test_chain_can_be_trimmed_by_settings(install, monkeypatch) -> None:

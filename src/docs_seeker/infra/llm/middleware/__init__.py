@@ -2,6 +2,7 @@
 
 from docs_seeker.infra.llm.middleware.base import CallNext, LLMCallContext, LLMMiddleware, MiddlewareChain
 from docs_seeker.infra.llm.middleware.transport import (
+    BudgetGuardMiddleware,
     CircuitBreakerMiddleware,
     FallbackMiddleware,
     ObservabilityMiddleware,
@@ -10,6 +11,7 @@ from docs_seeker.infra.llm.middleware.transport import (
 )
 
 __all__ = [
+    "BudgetGuardMiddleware",
     "CallNext",
     "CircuitBreakerMiddleware",
     "FallbackMiddleware",

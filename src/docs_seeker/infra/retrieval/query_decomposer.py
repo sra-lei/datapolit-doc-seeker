@@ -24,13 +24,14 @@ class QueryDecomposer:
         # 允许注入 LLM（deps 组装点传入）；缺省时走全局网关单例
         self.llm = llm or get_llm_gateway()
 
-    def _call(self, prompt: str, max_tokens: int, name: str):
+    def _call(self, prompt: str, max_tokens: int, name: str, budget_guard: bool = False):
         return self.llm.generate(
             LLMRequest(
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_tokens,
                 temperature=settings.llm_decompose_temperature,
                 name=name,
+                meta={"budget_guard": True} if budget_guard else {},
             )
         )
 
@@ -44,21 +45,14 @@ class QueryDecomposer:
         prompt = f"{prompt_template}\n\n问题：{question}"
         budget = settings.llm_decompose_max_tokens
         try:
-            response = self._call(prompt, budget, "query-decompose")
+            response = self._call(prompt, budget, "query-decompose", budget_guard=True)
             sub_questions = self._split_lines(response)
-            if not sub_questions and settings.llm_retry_max_tokens > budget:
-                # 推理模型把预算吃在 reasoning 上 → 正文为空。放大预算重试一次，
-                # 不要静默退化成单路检索（历史上正是这样丢掉了查询分解）。
-                finish = response.finish_reason
-                logger.warning(
-                    f"查询分解正文为空（finish={finish}, max_tokens={budget}）"
-                    f"——疑似 reasoning 吃满预算，用 max_tokens={settings.llm_retry_max_tokens} 重试一次"
-                )
-                response = self._call(prompt, settings.llm_retry_max_tokens, "query-decompose-budget-retry")
-                sub_questions = self._split_lines(response)
             if not sub_questions:
+                # 放大预算重试由 BudgetGuardMiddleware 负责（生成 / 改写共用一份实现）；
+                # 这里只处理「兜底后仍为空」——不能静默退化成单路检索（历史上正是这样
+                # 丢掉了查询分解），如实记 warning 并回退原问题。
                 logger.warning(
-                    f"查询分解仍为空（max_tokens={settings.llm_retry_max_tokens}）"
+                    f"查询分解仍为空（finish={response.finish_reason}, max_tokens={budget}）"
                     "→ 退回原问题单路检索（多路召回能力本次未生效）"
                 )
                 return Query(text=question, sub_queries=[question])

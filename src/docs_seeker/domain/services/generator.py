@@ -45,6 +45,7 @@ class Generator:
         stream: bool = False,
         name: str = "generate-response",
         timeout: float | None = None,
+        budget_guard: bool = False,
     ) -> LLMResponse:
         """单次调用 LLM 网关，返回 ``LLMResponse`` 信封。
 
@@ -52,6 +53,9 @@ class Generator:
         否则采样噪声会盖过待测改动的量级）；模型可取 ``LLM_GENERATE_MODEL``
         覆盖（分层路由：生成走非推理模型；空 = 沿用 LLM_MODEL，旧行为）；
         ``timeout`` 非空时覆盖全局超时（判断类调用传短超时快速失败）。
+
+        ``budget_guard=True`` 时启用 transport 的预算兜底（截断空正文 → 放大预算
+        重试一次，机制见 ``middleware.BudgetGuardMiddleware``）。
 
         降级（``fallback_used``）不再静默：这里记 warning，便于评估归因。
         """
@@ -64,6 +68,7 @@ class Generator:
                 name=name,
                 model=settings.llm_generate_model or None,
                 timeout=timeout,
+                meta={"budget_guard": True} if budget_guard else {},
             )
         )
         if response.fallback_used:
@@ -73,28 +78,21 @@ class Generator:
     def _call_with_budget_guard(
         self, messages: list[dict], name: str = "generate-response", timeout: float | None = None
     ) -> str:
-        """调用生成并做预算兜底：推理模型把预算耗在 reasoning 上时正文会为空。
+        """生成答案（带预算兜底）。
 
-        判定 = 正文为空 且 ``finish_reason == 'length'``（截断），此时用
-        ``LLM_RETRY_MAX_TOKENS`` 放大预算重试**一次**；仍为空则如实返回空串，
-        由调用方记录 warning —— 绝不把 reasoning_content 当正文、也不静默编造。
+        机制已收编到 transport 的 ``BudgetGuardMiddleware``（生成与查询改写共用一份）：
+        正文为空且 ``finish_reason == 'length'`` 时，用 ``LLM_RETRY_MAX_TOKENS``
+        放大预算重试**一次**。这里只负责发起调用 + 兜底后仍为空时如实记 warning ——
+        绝不把 reasoning_content 当正文、也不静默编造。
         """
         budget = settings.llm_generate_max_tokens
-        response = self._call(messages, budget, name=name, timeout=timeout)
-        answer, finish_reason = response.text, response.finish_reason
-        if not answer and finish_reason == "length" and settings.llm_retry_max_tokens > budget:
+        response = self._call(messages, budget, name=name, timeout=timeout, budget_guard=True)
+        if not response.text:
             logger.warning(
-                f"生成被截断且正文为空（max_tokens={budget}, finish=length）"
-                f"——疑似 reasoning 吃满预算，用 max_tokens={settings.llm_retry_max_tokens} 重试一次"
-            )
-            response = self._call(messages, settings.llm_retry_max_tokens, name=f"{name}-budget-retry", timeout=timeout)
-            answer, finish_reason = response.text, response.finish_reason
-        if not answer:
-            logger.warning(
-                f"生成正文为空（finish={finish_reason}, max_tokens={budget}）"
+                f"生成正文为空（finish={response.finish_reason}, max_tokens={budget}）"
                 "——检查 LLM_MODEL 是否为推理模型、LLM_GENERATE_MAX_TOKENS 是否偏小"
             )
-        return answer
+        return response.text
 
     def generate(
         self,

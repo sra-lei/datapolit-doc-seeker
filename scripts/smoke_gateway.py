@@ -10,7 +10,9 @@
 检查项：
 1. 普通调用 —— 信封取到正文 / finish_reason / usage，provider=primary、attempts=1；
 2. 参数透传 —— extra 里的 provider 参数（top_p）被真实 API 接受，不报 400；
-3. 流式 —— .text 为空、raw 是真 stream、iter_text() 能产出增量（含 include_usage 末包）。
+3. 流式 —— .text 为空、raw 是真 stream、iter_text() 能产出增量（含 include_usage 末包）
+4. 预算兜底 —— 给小预算（16）打推理模型，正文会空且 finish=length，middleware 应自动
+   放大预算重试一次并拿到正文（这是 Phase 2 收编后的真实链路验证）。
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ import sys
 
 os.environ.setdefault("LANGFUSE_TRACING_ENABLED", "false")
 
+from docs_seeker.core.config import settings  # noqa: E402
 from docs_seeker.domain.interfaces.llm import LLMRequest  # noqa: E402
 from docs_seeker.infra.llm.gateway import LLMGateway  # noqa: E402
 
@@ -66,6 +69,32 @@ def main() -> int:
         failures.append("流式信封 .text 应为空（只做透传）")
     if not deltas:
         failures.append("流式未产出任何增量")
+
+    # 4. 预算兜底：小预算 → 空正文 + length → middleware 放大预算重试一次
+    #    用「SDK 实际调用序列」判定（只看正文会歧义：小预算也可能碰巧吐出正文）
+    sdk_calls: list = []
+    _real_create = gw.primary_client.chat.completions.create
+
+    def _counting_create(**kwargs):
+        sdk_calls.append(kwargs.get("max_tokens"))
+        return _real_create(**kwargs)
+
+    gw.primary_client.chat.completions.create = _counting_create
+    small = 16
+    resp4 = gw.generate(
+        LLMRequest(
+            messages=PROMPT,
+            max_tokens=small,
+            temperature=0.0,
+            name="smoke-budget-guard",
+            meta={"budget_guard": True},
+        )
+    )
+    print(f"[4] 预算兜底 max_tokens={small} → SDK 调用预算序列={sdk_calls} text={resp4.text!r}")
+    if sdk_calls[:1] != [small]:
+        failures.append(f"预算兜底首次调用预算异常：{sdk_calls}")
+    if sdk_calls != [small, settings.llm_retry_max_tokens] or not resp4.text:
+        failures.append(f"预算兜底未按预期放大重试：SDK 调用={sdk_calls}, text={resp4.text!r}")
 
     if failures:
         print("\n冒烟失败：" + "；".join(failures))
