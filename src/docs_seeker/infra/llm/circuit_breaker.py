@@ -57,8 +57,13 @@ class CircuitBreaker:
         with self._lock:
             self.failure_count += 1
             self.last_failure_time = time.time()
-            # 半开状态下试探失败 → 立即回到 OPEN，重新计冷却
+            # 达到熔断条件（任一即可）：
+            #  1) 半开状态下试探失败 → 下游未恢复，立即回到 OPEN 重新计冷却
+            #     （HALF_OPEN 只放行一次试探，失败即证明还没恢复，与失败次数无关）
+            #  2) 连续失败达到阈值 → CLOSED 路径的常规熔断
             if self.state == CircuitState.HALF_OPEN or self.failure_count >= self.failure_threshold:
+                # 仅在首次转 OPEN 时打日志；已在 OPEN 时失败只刷新 last_failure_time
+                # （冷却起点延后），不重复刷错误日志
                 if self.state != CircuitState.OPEN:
                     logger.error(f"熔断器打开！连续失败 {self.failure_count} 次")
                 self.state = CircuitState.OPEN
