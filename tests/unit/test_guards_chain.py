@@ -20,8 +20,8 @@ from types import SimpleNamespace
 import pytest
 from loguru import logger
 
-from docs_seeker.domain.interfaces.llm import LLMRequest
 from docs_seeker.domain.models.chunk import Chunk
+from docs_seeker.domain.models.llm import LLMRequest
 from docs_seeker.domain.models.query import Query
 from docs_seeker.domain.services.chat_service import ChatService
 from docs_seeker.domain.services.guards import (

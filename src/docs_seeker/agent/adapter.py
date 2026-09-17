@@ -8,7 +8,7 @@ runner 不直接碰 provider 原始结构。
 from __future__ import annotations
 
 from docs_seeker.agent.models import LLMMessage
-from docs_seeker.domain.interfaces.llm import LLMResponse
+from docs_seeker.domain.models.llm import LLMResponse
 
 
 def parse_llm_response(response: LLMResponse) -> LLMMessage:

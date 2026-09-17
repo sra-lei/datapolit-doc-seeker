@@ -3,8 +3,9 @@
 from loguru import logger
 
 from docs_seeker.core.config import prompts, settings
-from docs_seeker.domain.interfaces.llm import LLMProvider, LLMRequest, LLMResponse
+from docs_seeker.domain.interfaces.llm import LLMProvider
 from docs_seeker.domain.models.chunk import Chunk
+from docs_seeker.domain.models.llm import LLMRequest, LLMResponse
 from docs_seeker.infra.llm.client import get_llm_client
 
 _DEFAULT_SYSTEM_PROMPT = (

@@ -14,7 +14,7 @@ from dataclasses import replace
 from loguru import logger
 
 from docs_seeker.core.config import settings
-from docs_seeker.domain.interfaces.llm import LLMRequest, LLMResponse
+from docs_seeker.domain.models.llm import LLMRequest, LLMResponse
 from docs_seeker.infra.llm.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 from docs_seeker.infra.llm.errors import AllModelsFailedError
 from docs_seeker.infra.llm.middleware.base import CallNext, LLMCallContext

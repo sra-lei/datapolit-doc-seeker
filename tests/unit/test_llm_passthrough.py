@@ -18,7 +18,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from docs_seeker.domain.interfaces.llm import LLMRequest, LLMResponse
+from docs_seeker.domain.models.llm import LLMRequest, LLMResponse
 from docs_seeker.infra.llm import client as client_module
 
 

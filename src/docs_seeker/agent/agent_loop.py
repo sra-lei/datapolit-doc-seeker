@@ -1,7 +1,7 @@
 from loguru import logger
 
 from docs_seeker.core.config import settings
-from docs_seeker.domain.interfaces.llm import LLMRequest
+from docs_seeker.domain.models.llm import LLMRequest
 from docs_seeker.infra.llm.client import get_llm_client
 from docs_seeker.infra.logger.logging import setup_logging
 
