@@ -2,7 +2,7 @@ from loguru import logger
 
 from docs_seeker.api.deps import get_llm_client
 from docs_seeker.config.settings import settings
-from docs_seeker.infra.logger.logging import setup_logging
+from docs_seeker.infra.logger import setup_logging
 from docs_seeker.models.llm import LLMRequest
 
 SYSTEM_PROMPT = """

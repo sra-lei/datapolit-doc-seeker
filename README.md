@@ -8,10 +8,10 @@
 src/docs_seeker/
 ├── api/                          # 接口层（HTTP 适配）
 │   ├── main.py                   # FastAPI 应用实例 + 中间件 + lifespan（uvicorn 入口）
-│   ├── deps.py                   # 依赖注入组装点（单例管理）
+│   ├── deps.py                   # 依赖注入组装点（单例管理，组合根）
 │   ├── middleware.py             # 中间件（请求日志 / 指标）
 │   ├── routes/                   # 路由定义（文件拍平，对外保留 /v1 前缀）
-│   │   ├── __init__.py           # v1 路由聚合
+│   │   ├── router.py             # /v1 聚合路由（统一挂载各子路由）
 │   │   ├── chat.py               # /v1/chat
 │   │   ├── health.py             # /v1/health
 │   │   ├── stats.py              # /v1/stats（缓存 + LLM 网关指标）
@@ -20,47 +20,75 @@ src/docs_seeker/
 │   └── schemas/                  # 请求/响应模型（Pydantic）
 │       ├── request.py
 │       └── response.py
+├── agent/                        # Agentic 循环（M1：决策/工具调用/成文）
+│   ├── runner.py                 # AgentRunner（复用 LLM 客户端与检索器）
+│   ├── agent_loop.py             # 对话循环骨架（trajectory + 终止条件）
+│   ├── tools.py                  # 工具（检索 + 元数据过滤）
+│   ├── adapter.py                # LLM 请求/响应适配
+│   ├── models.py                 # agent 内部数据结构
+│   └── prompts.py                # agent 提示词
+├── config/                       # 配置
+│   └── settings.py               # Pydantic Settings（环境变量 + .env）
 ├── core/                         # 跨模块共享的通用代码
-│   ├── config.py                 # Pydantic Settings + yaml 加载（settings/prompts/retrieval_config）
-│   ├── logging.py                # 结构化日志（loguru）
 │   ├── metrics.py                # Prometheus 指标
-│   ├── security.py               # 安全护栏（输入注入检测 / 输出脱敏）
-│   ├── prompts.yaml              # Prompt 模板管理
-│   └── retrieval.yaml            # 检索策略配置（权重/阈值等）
-├── domain/                       # 核心业务层（独立于外部）
-│   ├── models/                   # 领域模型
-│   │   ├── document.py           # 文档实体
-│   │   ├── chunk.py              # 文档块实体
-│   │   └── query.py              # 查询实体
-│   ├── services/                 # 业务服务
-│   │   ├── chat_service.py       # 问答用例：检索 + 生成
-│   │   ├── generator.py          # 答案生成（LLM 调用 + 置信度）
-│   │   ├── rag_pipeline.py       # RAG 完整流程编排
-│   │   └── top_warmup.py         # 热门问题预热器（后台线程）
-│   └── interfaces/               # 抽象接口（依赖倒置）
-│       ├── retriever.py          # 检索器抽象接口
-│       ├── embedder.py           # 向量化接口
-│       └── llm.py                # LLM 接口
-└── infra/               # 基础设施层（外部依赖实现）
-    ├── database/                 # 数据库实现
-    │   └── milvus_client.py      # Milvus 只读客户端
+│   └── __init__.py
+├── interfaces/                   # 抽象接口（依赖倒置，核心契约）
+│   ├── retriever.py              # 检索器抽象接口
+│   ├── embedder.py               # 向量化接口
+│   ├── llm.py                    # LLM Provider 接口
+│   ├── cache.py                  # 语义缓存接口（SemanticCachePort）
+│   ├── usage.py                  # 使用统计存储接口（UsageStore）
+│   └── lock.py                   # 分布式锁接口（DistributedLock）
+├── models/                       # 领域实体
+│   ├── document.py               # 文档实体
+│   ├── chunk.py                  # 文档块实体
+│   ├── query.py                  # 查询实体
+│   └── llm.py                    # LLMRequest / LLMResponse
+├── services/                     # 业务服务（用例编排，只依赖 interfaces/models）
+│   ├── chat_service.py           # 问答用例：检索 + 生成 + 护栏
+│   ├── generator.py              # 答案生成（LLM 调用 + 置信度）
+│   ├── rag_pipeline.py           # RAG 完整流程编排
+│   ├── query_decomposer.py       # 查询分解（LLM）
+│   ├── metadata.py               # 问题结构化元数据解析（领域规则，纯函数）
+│   ├── top_warmup.py             # 热门问题预热器（后台线程，依赖注入）
+│   └── usage.py                  # UsageTracker（业务统计口径）
+└── infra/                        # 基础设施层（外部依赖实现）
     ├── cache/                    # 缓存实现
     │   ├── redis_client.py       # Redis 基础客户端
+    │   ├── redis_lock.py         # 分布式锁实现（RedisDistributedLock）
     │   └── semantic_cache.py     # 语义缓存策略
-    ├── llm/                      # LLM 实现
-    │   └── gateway.py            # 重试/熔断/降级网关
+    ├── database/                 # 数据库实现
+    │   └── milvus_client.py      # Milvus 只读客户端
     ├── embedding/                # 向量化实现
     │   └── embedder.py           # 查询向量化（只读）
+    ├── guards/                   # 应用级护栏（GuardChain + 内置规则）
+    │   ├── base.py               # Guard 协议 / GuardChain / 上下文
+    │   ├── builtin.py            # InjectionGuard / PIIRedactionGuard / TopicPolicyGuard
+    │   └── security.py           # 安全护栏（注入检测 / 脱敏）
+    ├── llm/                      # LLM 实现
+    │   ├── client.py             # LLMClient（组 payload + 调 SDK + 包信封）
+    │   ├── errors.py             # 错误类型（AllModelsFailedError 等）
+    │   └── middleware/           # 可插拔调用策略（洋葱模型）
+    │       ├── base.py           # 协议：CallNext / LLMCallContext / MiddlewareChain
+    │       ├── guards.py         # client 内护栏（扫描送 provider 的 messages）
+    │       ├── observability.py  # 观测
+    │       ├── retry.py          # 重试
+    │       ├── circuit_breaker.py# 熔断器状态机
+    │       ├── fallback.py       # 降级（主→备）
+    │       └── budget_guard.py   # token 预算守卫
+    ├── logger/                   # 结构化日志（loguru）
+    │   └── logging.py
     ├── retrieval/                # 检索策略实现
     │   ├── dense_retriever.py    # 语义检索（Milvus）
     │   ├── bm25_retriever.py     # BM25 稀疏检索
     │   ├── summary_retriever.py  # 摘要引导检索
     │   ├── composite_retriever.py# 多路融合（RRF）
-    │   ├── query_decomposer.py   # 查询分解
+    │   ├── metadata_filter.py    # 存储过滤适配（Milvus 表达式 / BM25 谓词）
     │   └── hybrid_router.py      # BM25 路由
-    └── usage/                    # RAG 使用统计（Redis 持久化）
-        ├── tracker.py            # UsageTracker 实现
-        └── __init__.py           # 兼容导出 get_usage_tracker
+    ├── tracker/                  # 链路追踪（Langfuse）
+    │   └── langfuse.py           # 追踪接入（TRACE_NAME / FEATURE_TAG / shutdown）
+    └── usage/                    # RAG 使用统计存储（Redis 实现）
+        └── redis_store.py        # RedisUsageStore（业务操作语义化接口实现）
 ```
 
 ## 设计原则
@@ -70,23 +98,25 @@ src/docs_seeker/
 ```
 HTTP 层 (api/)
     ↓ 依赖
-业务服务层 (domain/services/)
+业务服务层 (services/)           ← 用例编排，只依赖 interfaces/models
     ↓ 依赖
-领域层 (domain/models + interfaces) ← 核心，定义接口
+契约层 (interfaces + models)     ← 核心，定义接口与实体
     ↑ 实现
-基础设施层 (infra/) ← 实现领域接口
+基础设施层 (infra/)              ← 实现领域接口（Milvus / Redis / LLM / Langfuse）
 ```
 
 - **依赖方向**：外层依赖内层，内层不依赖外层
-- **领域层独立**：不依赖任何框架或外部库，只包含业务实体和接口定义
+- **契约层独立**：不依赖任何框架或外部库，只包含实体和接口定义
 - **可测试性**：每层可独立 Mock 测试
+- **组合根**：`api/deps.py` 是唯一组装点，所有依赖显式注入（构造参数无默认值，漏配即报错）
 
 ### 接口隔离（依赖倒置）
 
-- `domain/interfaces/` 定义抽象接口
+- `interfaces/` 定义抽象接口（Retriever / EmbeddingProvider / LLMProvider / SemanticCachePort / UsageStore / DistributedLock）
 - `infra/` 实现这些接口（Milvus、Redis、LLM 等）
 - 上层只依赖接口，不依赖具体实现
-- 便于替换组件（如 Milvus → Qdrant）
+- 便于替换组件（如 Milvus → Qdrant、Redis → 内存实现）
+- **接口语义化**：接口方法表达业务操作而非存储原语（如 `UsageStore.record_call`，键结构/命令藏在实现内）
 
 ### 关注点分离
 
@@ -94,12 +124,12 @@ HTTP 层 (api/)
 | -------------- | ----------------------------------- | ---------------------- |
 | **API 层**     | HTTP 协议适配、参数校验、响应格式化 | FastAPI 路由           |
 | **业务服务层** | 用例编排、业务流程控制              | 检索→融合→生成         |
-| **领域层**     | 核心业务逻辑、实体定义              | 检索策略接口、文档实体 |
+| **契约层**     | 核心业务逻辑、实体定义、接口契约    | 检索策略接口、文档实体 |
 | **基础设施层** | 外部依赖适配                        | 数据库客户端、LLM SDK  |
 
 ### 配置外部化
 
-- 所有环境相关配置放在 `core/config.py`（Pydantic Settings + yaml）
+- 所有环境相关配置放在 `config/settings.py`（Pydantic Settings + .env）
 - 敏感信息通过环境变量注入（`.env`）
 - Prompt 模板与代码分离，便于调优
 
@@ -204,13 +234,15 @@ pre-commit run --all-files
 
 | 改动     | 原结构                                             | 新结构                                               | 原因                                                                               |
 | -------- | -------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| 配置集中 | `config/settings.py` + `config/loader.py`          | `core/config.py`（Pydantic Settings + yaml 加载）    | 配置与日志/指标/安全同属跨模块通用代码，收敛到 `core/`                             |
-| 领域模型 | `domain/entities/`                                 | `domain/models/`                                     | 命名与"业务实体/数据模型"一致                                                      |
-| 业务服务 | `application/services/` + `application/pipelines/` | `domain/services/`                                   | 用例编排（ChatService/Generator/RAGPipeline 等）归入领域层服务                     |
+| 配置集中 | `config/settings.py` + `config/loader.py`          | `config/settings.py`（Pydantic Settings + .env）     | 配置收敛到单一模块，环境变量驱动                                                   |
+| 领域模型 | `domain/entities/`                                 | `models/`（顶层）                                    | 命名与"业务实体/数据模型"一致；去掉 `domain/` 中间层，契约层平铺顶层               |
+| 业务服务 | `application/services/` + `application/pipelines/` | `services/`（顶层）                                  | 用例编排（ChatService/Generator/RAGPipeline 等）归入业务服务层                     |
+| 抽象接口 | `domain/interfaces/`                               | `interfaces/`（顶层）                                | 依赖倒置契约与实体平铺顶层，`domain/` 包拆分为三个顶层包                           |
 | 检索实现 | `retrieval/` 顶层                                  | `infra/retrieval/`                                   | 检索策略依赖 Milvus/embedding，属基础设施实现                                      |
 | 基础设施 | `infra/`                                           | `infra/`                                             | 命名规范化；`vector_store/` → `database/`；`observability/`、`security/` → `core/` |
+| 护栏     | `core/security.py`、`domain/services/guards/`      | `infra/guards/`（base + builtin + security）         | 护栏链（GuardChain/内置规则）归入基础设施，LLM middleware 适配器也挂在 infra 侧    |
 | API 入口 | `docs_seeker/app.py`                               | `docs_seeker/api/main.py`                            | FastAPI 应用实例与中间件归入接口层                                                 |
-| 路由目录 | `api/routes/v1/` 子目录                            | `api/routes/` 拍平（`/v1` 前缀保留在聚合处）         | 路由按模块组织，版本前缀由前缀管理                                                 |
+| 路由目录 | `api/routes/v1/` 子目录                            | `api/routes/` 拍平 + `router.py` 聚合（`/v1` 前缀）  | 路由按模块组织，版本前缀由聚合处管理                                               |
 | 测试组织 | `tests/*.py` 扁平                                  | `tests/unit/` + `tests/integration/` + `conftest.py` | 单测与集成测试分层                                                                 |
 
 这样调整后，目录结构与目标架构保持一致，并且 README 中的设计原则说明可以帮助团队成员理解架构决策的缘由。

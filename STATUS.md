@@ -51,33 +51,36 @@
 src/docs_seeker/
 ├── api/                          # 接口层（HTTP 适配）
 │   ├── main.py                   # FastAPI 应用实例 + 中间件 + lifespan（uvicorn 入口）
-│   ├── deps.py                   # 依赖注入组装点（单例管理）
+│   ├── deps.py                   # 依赖注入组装点（组合根，单例管理）
 │   ├── middleware.py             # 请求日志 + 指标中间件
 │   ├── routes/                   # 路由（文件拍平，对外保留 /v1 前缀）
-│   │   ├── __init__.py           # v1 路由聚合
+│   │   ├── router.py             # /v1 聚合路由（统一挂载各子路由）
 │   │   ├── chat.py / health.py
 │   │   └── stats.py / milvus.py / usage.py
 │   └── schemas/                  # request.py / response.py
-├── core/                         # 跨模块共享
-│   ├── config.py                 # Pydantic Settings + yaml 加载（settings/prompts/retrieval_config）
-│   ├── logging.py                # 结构化日志（loguru）
-│   ├── metrics.py                # Prometheus 指标
-│   ├── security.py               # 安全护栏（输入注入检测 / 输出脱敏）
-│   ├── prompts.yaml / retrieval.yaml
-├── domain/                       # 核心业务层
-│   ├── models/                   # Chunk / Document / Query
-│   ├── services/                 # chat_service / generator / rag_pipeline / top_warmup
-│   └── interfaces/               # Retriever / EmbeddingProvider / LLMProvider
-└── infra/               # 基础设施层（外部依赖实现）
+├── agent/                        # Agentic 循环（M1）：runner / agent_loop / tools / adapter
+├── config/                       # settings.py（Pydantic Settings + .env）
+├── core/                         # metrics.py（跨模块共享的通用代码）
+├── interfaces/                   # 契约层（依赖倒置）：Retriever / EmbeddingProvider /
+│                                 #   LLMProvider / SemanticCachePort / UsageStore / DistributedLock
+├── models/                       # 实体：Chunk / Document / Query / LLMRequest / LLMResponse
+├── services/                     # 业务服务：chat_service / generator / rag_pipeline /
+│                                 #   query_decomposer / metadata / top_warmup / usage
+└── infra/                        # 基础设施层（外部依赖实现）
     ├── database/                 # milvus_client.py（只读）
-    ├── cache/                    # redis_client.py + semantic_cache.py
-    ├── llm/                      # gateway.py（重试/熔断/降级）
-    ├── embedding/                # embedder.py（查询向量化）
-    ├── retrieval/                # dense/bm25/summary/composite/query_decomposer/hybrid_router
-    └── usage/                    # tracker.py（RAG 使用统计）+ __init__.py（兼容导出）
+    ├── cache/                    # redis_client.py + redis_lock.py + semantic_cache.py
+    ├── guards/                   # GuardChain + 内置规则（base / builtin / security）
+    ├── llm/                      # client.py + middleware/（观测/重试/熔断/降级/护栏/预算）
+    ├── logger/                   # logging.py（loguru）
+    ├── retrieval/                # dense/bm25/summary/composite/metadata_filter/hybrid_router
+    ├── tracker/                  # langfuse.py（链路追踪）
+    └── usage/                    # redis_store.py（UsageStore 的 Redis 实现）
 ```
 
-> 结论：README 目录树与实际代码已对齐（重构落地）。README 声称但尚未实现的部分仅剩：认证/限流中间件（P3-4）、HybridRouter 接线（P2-3）。
+> 说明：`domain/` 包已拆分为顶层 `interfaces/` + `models/` + `services/` 三个包；
+> 护栏链（`domain/services/guards/`）迁入 `infra/guards/`；配置（`core/config.py`）迁入
+> `config/settings.py`；`core/` 仅保留 metrics。README 声称但尚未实现的部分仅剩：
+> 认证/限流中间件（P3-4）、HybridRouter 接线（P2-3）。
 
 ### 2.2 依赖现状
 
@@ -102,7 +105,7 @@ src/docs_seeker/
 
 遵循 [langfuse/skills](https://github.com/langfuse/skills) 官方 Agent Skill 与[追踪最佳实践](https://langfuse.com/docs/observability/best-practices)实现：
 
-- **接入点**：`infra/tracing.py`（环境变量加载 + `tracing_enabled()` / `shutdown_langfuse()`）
+- **接入点**：`infra/tracker/langfuse.py`（环境变量加载 + `tracing_enabled()` / `shutdown_langfuse()`）
 - **LLM 调用**：`infra/llm/gateway.py`、`infra/embedding/embedder.py` 改用 `langfuse.openai.OpenAI` drop-in 包装，自动记录 generation/embedding 观测（模型名、token 用量、耗时、错误）；流式开启 `stream_options.include_usage` 采集 token
 - **流程观测**：`ChatService.chat/chat_stream`（根 trace `chat-response`）、`RAGPipeline.prepare`（`retrieve-context`）、三路检索器与 RRF 融合（`retriever` 类型）、语义缓存查询（`retriever` 类型）
 - **属性**：`session_id`/`user_id`（ChatRequest 新增可选字段）→ propagate_attributes 传播；tags=`chat`；environment 取 `ENVIRONMENT`；metadata 含路由

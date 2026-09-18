@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 # 但按 skill 最佳实践仍先确保 .env 注入 os.environ，再引入 langfuse。
 load_dotenv()
 
-from langfuse import Langfuse, get_client  # noqa: E402  # 必须在 load_dotenv() 之后导入
+from langfuse import get_client as langfuse_client  # noqa: E402  # 必须在 load_dotenv() 之后导入
 
 # 稳定的观测命名（best practice：动词开头、低基数，便于过滤/仪表盘/评估器复用）
 TRACE_NAME = "chat-response"
@@ -33,17 +33,12 @@ def tracing_enabled() -> bool:
     return bool(os.environ.get("LANGFUSE_PUBLIC_KEY") and os.environ.get("LANGFUSE_SECRET_KEY"))
 
 
-def get_langfuse() -> Langfuse:
-    """返回全局 langfuse 客户端（未配置时为 disabled 客户端，调用均为 no-op）。"""
-    return get_client()
-
-
 def shutdown_langfuse() -> None:
     """进程退出前冲刷并关闭 langfuse 客户端（长驻服务在 lifespan 收尾时调用）。"""
     if not tracing_enabled():
         return
     try:
-        get_client().shutdown()
+        langfuse_client().shutdown()
     except Exception:
         # 关闭失败不应影响进程退出
         pass
