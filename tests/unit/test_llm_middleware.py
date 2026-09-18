@@ -22,8 +22,8 @@ import pytest
 from docs_seeker.core.config import settings
 from docs_seeker.domain.models.llm import LLMRequest
 from docs_seeker.infra.llm import client as client_module
-from docs_seeker.infra.llm.circuit_breaker import CircuitState
 from docs_seeker.infra.llm.errors import AllModelsFailedError
+from docs_seeker.infra.llm.middleware import CircuitState
 
 PROMPT = LLMRequest(messages=[{"role": "user", "content": "x"}])
 

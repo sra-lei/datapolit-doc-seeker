@@ -291,7 +291,7 @@ domain/services/
 ### Phase 1（middleware 骨架 + transport 插件化）✅ 2026-09-17
 
 - **新增文件**：`infra/llm/middleware/base.py`（洋葱链 + `LLMCallContext` + `LLMMiddleware` 协议）、`middleware/transport.py`（observability / fallback / circuit_breaker / retry）、`infra/llm/circuit_breaker.py`（熔断器从 gateway 拆出）、`infra/llm/errors.py`。
-  - （2026-09-18 注：`transport.py` 已按 middleware 拆为 `observability.py` / `fallback.py` / `circuit_breaker.py` / `budget_guard.py` / `retry.py`（含 `is_retryable`）五个文件，包 `__init__` 的公共导入面不变；下文 Phase 记录中 `middleware/transport.py` 路径均指拆分前状态。）
+  - （2026-09-18 注：`transport.py` 已按 middleware 拆为 `observability.py` / `fallback.py` / `circuit_breaker.py` / `budget_guard.py` / `retry.py`（含 `is_retryable`）五个文件，包 `__init__` 的公共导入面不变；同日熔断器状态机（`CircuitBreaker` / `CircuitBreakerOpenError` / `CircuitState`）也从 `infra/llm/circuit_breaker.py` 内聚进 `middleware/circuit_breaker.py`（与 middleware 同文件），经 middleware 包导出、`client.py` 再导出的公共面不变。下文 Phase 记录中 `middleware/transport.py` / `infra/llm/circuit_breaker.py` 路径均指变动前状态。）
 - **网关收敛**：`generate()` 只剩「起 ctx → 跑链路 → 盖章到信封」；`_invoke()` = 选 client/模型 → 组 payload → 调 SDK → 包信封。策略零内联。
 - **链路顺序**（外层→内层）：`observability → fallback → circuit_breaker → retry → terminal`
   - `fallback` 在熔断外层：熔断打开时由它接管走备用（与旧行为一致）；

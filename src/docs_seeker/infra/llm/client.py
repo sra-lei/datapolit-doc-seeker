@@ -27,11 +27,13 @@ from docs_seeker.core.config import settings
 from docs_seeker.domain.interfaces.llm import LLMProvider
 from docs_seeker.domain.models.llm import LLMRequest, LLMResponse
 from docs_seeker.domain.services.guards import get_guard_chain
-from docs_seeker.infra.llm.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError, CircuitState
 from docs_seeker.infra.llm.errors import AllModelsFailedError, LLMError
 from docs_seeker.infra.llm.middleware import (
     BudgetGuardMiddleware,
+    CircuitBreaker,
     CircuitBreakerMiddleware,
+    CircuitBreakerOpenError,
+    CircuitState,
     FallbackMiddleware,
     LLMCallContext,
     LLMGuardMiddleware,

@@ -7,9 +7,9 @@ from collections.abc import Callable
 from loguru import logger
 
 from docs_seeker.domain.models.llm import LLMRequest, LLMResponse
-from docs_seeker.infra.llm.circuit_breaker import CircuitBreakerOpenError
 from docs_seeker.infra.llm.errors import AllModelsFailedError
 from docs_seeker.infra.llm.middleware.base import CallNext, LLMCallContext
+from docs_seeker.infra.llm.middleware.circuit_breaker import CircuitBreakerOpenError
 from docs_seeker.infra.llm.middleware.retry import is_retryable
 
 
