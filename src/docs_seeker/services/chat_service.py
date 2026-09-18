@@ -19,6 +19,17 @@ from docs_seeker.services.usage import UsageTracker
 CACHE_FIELDS = ("id", "text", "source", "chapter", "chapter_title", "section", "section_title", "score", "sources")
 
 
+def _chunk_text(text: str, size: int = 80) -> list[str]:
+    """把完整文本切成固定长度片段（agent 非流式产出的答案用于 SSE 增量吐流）。
+
+    空文本返回 []（调用方不应产出空 delta）；片段在字符边界硬切，
+    拼接后与原文完全一致（消费方按顺序拼接即可还原）。
+    """
+    if not text:
+        return []
+    return [text[i : i + size] for i in range(0, len(text), size)]
+
+
 @dataclass
 class ChatResult:
     answer: str
@@ -166,10 +177,17 @@ class ChatService:
 
         事件类型：
           - {"type": "error", "message": str}            输入被拦截 / 生成失败
-          - {"type": "meta", "cached": bool, "sources": [...], "query_decomposed": [...]|None, "confidence": str|None}
+          - {"type": "meta", "cached": bool, "sources": [...], "query_decomposed": [...]|None,
+             "confidence": str|None, "agent_steps": [...]|None, "agent_sufficient": bool|None}
           - {"type": "delta", "content": str}            增量文本（可拼接为完整回答）
           - {"type": "done", "answer": str, "confidence": str, "sources": [...],
-             "cached": bool, "query_decomposed": [...]|None}
+             "cached": bool, "query_decomposed": [...]|None,
+             "agent_steps": [...]|None, "agent_sufficient": bool|None}
+
+        Agentic 分流（与 chat() 对称）：``settings.agent_enabled`` 且已注入
+        ``agent_runner`` 时走 agent 路径 —— 完整答案产出后按片段吐 delta，
+        meta/done 携带 agent_steps（可审计 trace）与 agent_sufficient；
+        任何异常按 ``agent_fallback_to_pipeline`` 决定回退旧管线或显式 error。
         """
         # Langfuse：@observe 原生支持生成器（迭代结束/关闭时自动结束观测）
         langfuse = get_client()
@@ -206,6 +224,8 @@ class ChatService:
                         "sources": sources,
                         "query_decomposed": None,
                         "confidence": confidence,
+                        "agent_steps": None,
+                        "agent_sufficient": None,
                     }
                     yield {"type": "delta", "content": answer}
                     yield {
@@ -215,35 +235,107 @@ class ChatService:
                         "sources": sources,
                         "cached": True,
                         "query_decomposed": None,
+                        "agent_steps": None,
+                        "agent_sufficient": None,
                     }
                     return
 
-            chunks, sub_questions = self.pipeline.prepare(question, top_k=top_k, conversation_history=history)
-            self._inspect_documents(chunks)
-            source_dicts = [{k: v for k, v in chunk.to_dict().items() if k in CACHE_FIELDS} for chunk in chunks]
-            query_decomposed = sub_questions if len(sub_questions) > 1 else None
+            # ---- Agentic 分流（与 chat() 对称）：agent 路径产出完整答案后按片段吐流 ----
+            if settings.agent_enabled and self.agent_runner is not None:
+                try:
+                    ar = self.agent_runner.run(question, top_k=top_k)
+                    answer = ar.answer
+                    confidence = ar.confidence
+                    source_dicts = [
+                        {k: v for k, v in chunk.to_dict().items() if k in CACHE_FIELDS} for chunk in ar.evidence
+                    ]
+                    agent_steps = [asdict(s) for s in ar.steps]
+                    agent_sufficient = ar.sufficient
+                    logger.info(
+                        f"Agent 路径完成: steps={len(ar.steps)} evidence={len(ar.evidence)} sufficient={ar.sufficient}"
+                    )
+                except Exception as e:  # noqa: BLE001 — 回退契约：编排/客户端任何异常都落回旧管线
+                    if not settings.agent_fallback_to_pipeline:
+                        # 与 chat() 同口径：开发期默认不回退，让 agent 的失败显式暴露
+                        logger.error(
+                            f"Agent 路径失败且未启用回退（environment={settings.environment}）: {type(e).__name__}: {e}"
+                        )
+                        yield {"type": "error", "message": f"Agent 路径失败: {type(e).__name__}: {e}"}
+                        return
+                    logger.warning(f"Agent 路径失败，回退旧单轮管线: {type(e).__name__}: {e}")
+                    chunks, sub_questions = self.pipeline.prepare(question, top_k=top_k, conversation_history=history)
+                    self._inspect_documents(chunks)
+                    source_dicts = [{k: v for k, v in chunk.to_dict().items() if k in CACHE_FIELDS} for chunk in chunks]
+                    query_decomposed = sub_questions if len(sub_questions) > 1 else None
+                    agent_steps = None
+                    agent_sufficient = None
+                    yield {
+                        "type": "meta",
+                        "cached": False,
+                        "sources": source_dicts,
+                        "query_decomposed": query_decomposed,
+                        "confidence": None,
+                        "agent_steps": None,
+                        "agent_sufficient": None,
+                    }
+                    parts: list[str] = []
+                    try:
+                        for delta in self.pipeline.generator.generate_stream(question, chunks, history):
+                            parts.append(delta)
+                            yield {"type": "delta", "content": delta}
+                    except Exception as e:
+                        logger.error(f"流式生成失败: {e}")
+                        langfuse.update_current_span(level="ERROR", status_message=f"答案生成失败: {e}")
+                        yield {"type": "error", "message": f"答案生成失败: {e}"}
+                        return
+                    answer = self.guards.inspect("".join(parts), ANSWER_CTX).text
+                    confidence = compute_confidence(answer, chunks)
+                else:
+                    answer = self.guards.inspect(answer, ANSWER_CTX).text
+                    query_decomposed = None
+                    yield {
+                        "type": "meta",
+                        "cached": False,
+                        "sources": source_dicts,
+                        "query_decomposed": None,
+                        "confidence": confidence,
+                        "agent_steps": agent_steps,
+                        "agent_sufficient": agent_sufficient,
+                    }
+                    # agent 是非流式产出：把完整答案切成片段吐流（保持 SSE 增量体验）
+                    for delta in _chunk_text(answer, size=80):
+                        yield {"type": "delta", "content": delta}
+            else:
+                chunks, sub_questions = self.pipeline.prepare(question, top_k=top_k, conversation_history=history)
+                self._inspect_documents(chunks)
+                source_dicts = [{k: v for k, v in chunk.to_dict().items() if k in CACHE_FIELDS} for chunk in chunks]
+                query_decomposed = sub_questions if len(sub_questions) > 1 else None
+                agent_steps = None
+                agent_sufficient = None
 
-            yield {
-                "type": "meta",
-                "cached": False,
-                "sources": source_dicts,
-                "query_decomposed": query_decomposed,
-                "confidence": None,
-            }
+                yield {
+                    "type": "meta",
+                    "cached": False,
+                    "sources": source_dicts,
+                    "query_decomposed": query_decomposed,
+                    "confidence": None,
+                    "agent_steps": None,
+                    "agent_sufficient": None,
+                }
 
-            parts: list[str] = []
-            try:
-                for delta in self.pipeline.generator.generate_stream(question, chunks, history):
-                    parts.append(delta)
-                    yield {"type": "delta", "content": delta}
-            except Exception as e:
-                logger.error(f"流式生成失败: {e}")
-                langfuse.update_current_span(level="ERROR", status_message=f"答案生成失败: {e}")
-                yield {"type": "error", "message": f"答案生成失败: {e}"}
-                return
+                parts: list[str] = []
+                try:
+                    for delta in self.pipeline.generator.generate_stream(question, chunks, history):
+                        parts.append(delta)
+                        yield {"type": "delta", "content": delta}
+                except Exception as e:
+                    logger.error(f"流式生成失败: {e}")
+                    langfuse.update_current_span(level="ERROR", status_message=f"答案生成失败: {e}")
+                    yield {"type": "error", "message": f"答案生成失败: {e}"}
+                    return
 
-            answer = self.guards.inspect("".join(parts), ANSWER_CTX).text
-            confidence = compute_confidence(answer, chunks)
+                answer = self.guards.inspect("".join(parts), ANSWER_CTX).text
+                confidence = compute_confidence(answer, chunks)
 
             if use_cache and answer.strip():
                 # 同 chat()：空答案不写缓存，避免污染后续命中
@@ -258,7 +350,9 @@ class ChatService:
                 "confidence": confidence,
                 "sources": source_dicts,
                 "cached": False,
-                "query_decomposed": query_decomposed,
+                "query_decomposed": query_decomposed if len(query_decomposed or []) > 1 else None,
+                "agent_steps": agent_steps,
+                "agent_sufficient": agent_sufficient,
             }
 
     def _inspect_documents(self, chunks) -> None:
