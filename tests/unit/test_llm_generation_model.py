@@ -14,9 +14,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from docs_seeker.config.settings import Settings, settings
-from docs_seeker.domain.services.generator import Generator
 from docs_seeker.models.chunk import Chunk
 from docs_seeker.models.llm import LLMRequest
+from docs_seeker.services.generator import Generator
 
 
 class _FakeOpenAI:

@@ -4,8 +4,8 @@
 Redis 不可用时**抛异常**（由调用方决定降级策略，见 domain 的 ``TopQuestionWarmup``）。
 """
 
-from docs_seeker.domain.interfaces.lock import DistributedLock
 from docs_seeker.infra.cache.redis_client import get_redis_client
+from docs_seeker.interfaces.lock import DistributedLock
 
 
 class RedisDistributedLock(DistributedLock):

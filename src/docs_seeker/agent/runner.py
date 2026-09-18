@@ -20,10 +20,10 @@ from docs_seeker.agent.models import AgentResult, AgentStep
 from docs_seeker.agent.prompts import COMPOSE_PROMPT, SYSTEM_PROMPT, VERIFY_PROMPT
 from docs_seeker.agent.tools import default_tools
 from docs_seeker.config.settings import settings
-from docs_seeker.domain.interfaces.llm import LLMProvider
-from docs_seeker.domain.services.generator import compute_confidence
+from docs_seeker.interfaces.llm import LLMProvider
 from docs_seeker.models.chunk import Chunk
 from docs_seeker.models.llm import LLMRequest
+from docs_seeker.services.generator import compute_confidence
 
 VALID_ACTIONS = ("retrieve", "lookup_article", "final")
 MAX_PARSE_ERRORS = 2

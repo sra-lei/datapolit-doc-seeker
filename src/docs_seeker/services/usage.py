@@ -14,8 +14,8 @@ from typing import Any
 
 from loguru import logger
 
-from docs_seeker.domain.interfaces.cache import SemanticCachePort
-from docs_seeker.domain.interfaces.usage import UsageStore
+from docs_seeker.interfaces.cache import SemanticCachePort
+from docs_seeker.interfaces.usage import UsageStore
 
 # 需要统计的 RAG 接口
 _TRACKED_PATHS = {"/v1/chat"}

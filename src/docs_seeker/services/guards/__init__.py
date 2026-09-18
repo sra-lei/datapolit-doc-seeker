@@ -9,7 +9,7 @@
   **仅告警不短路**，让 agent 循环内的每次 LLM 调用也经过护栏。
 """
 
-from docs_seeker.domain.services.guards.base import (
+from docs_seeker.services.guards.base import (
     ANSWER_CTX,
     DOCUMENT_CTX,
     LLM_MESSAGES_CTX,
@@ -25,7 +25,7 @@ from docs_seeker.domain.services.guards.base import (
     GuardContext,
     GuardVerdict,
 )
-from docs_seeker.domain.services.guards.builtin import (
+from docs_seeker.services.guards.builtin import (
     InjectionGuard,
     PIIRedactionGuard,
     TopicPolicyGuard,

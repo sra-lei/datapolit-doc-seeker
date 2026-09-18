@@ -9,7 +9,7 @@ from langfuse.openai import OpenAI
 from loguru import logger
 
 from docs_seeker.config.settings import settings
-from docs_seeker.domain.interfaces.embedder import EmbeddingProvider
+from docs_seeker.interfaces.embedder import EmbeddingProvider
 
 
 class Embedder(EmbeddingProvider):

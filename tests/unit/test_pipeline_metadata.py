@@ -3,8 +3,8 @@
 不依赖 Milvus / LLM / Redis（decomposer / retriever / generator 全为测试替身）。
 """
 
-from docs_seeker.domain.services.rag_pipeline import RAGPipeline
 from docs_seeker.models.query import Query
+from docs_seeker.services.rag_pipeline import RAGPipeline
 
 
 class FakeDecomposer:

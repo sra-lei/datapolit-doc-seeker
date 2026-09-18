@@ -5,8 +5,8 @@
 在 domain 的 ``UsageTracker``。Redis 不可用时抛异常，由上层静默降级。
 """
 
-from docs_seeker.domain.interfaces.usage import CallStats, UsageStore, UserCalls
 from docs_seeker.infra.cache.redis_client import get_redis_client
+from docs_seeker.interfaces.usage import CallStats, UsageStore, UserCalls
 
 _PREFIX = "rag:usage"
 

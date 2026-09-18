@@ -24,12 +24,12 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from docs_seeker.config.settings import settings
-from docs_seeker.domain.services.chat_service import ChatService
-from docs_seeker.domain.services.generator import Generator, compute_confidence
-from docs_seeker.domain.services.query_decomposer import QueryDecomposer
 from docs_seeker.models.chunk import Chunk
 from docs_seeker.models.llm import LLMRequest
 from docs_seeker.models.query import Query
+from docs_seeker.services.chat_service import ChatService
+from docs_seeker.services.generator import Generator, compute_confidence
+from docs_seeker.services.query_decomposer import QueryDecomposer
 
 _EMPTY_TRUNCATED = ("", "length")  # 推理吃满预算：正文空 + 截断
 _EMPTY_STOPPED = ("", "stop")  # 真的没内容（非截断）

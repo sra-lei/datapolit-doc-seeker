@@ -4,7 +4,7 @@
 纯函数，不依赖 Milvus / LLM / Redis。
 """
 
-from docs_seeker.domain.services.metadata import parse_question_metadata
+from docs_seeker.services.metadata import parse_question_metadata
 
 
 def test_parse_article_chinese_numeral():

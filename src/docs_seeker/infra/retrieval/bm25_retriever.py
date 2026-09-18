@@ -24,9 +24,9 @@ from langfuse import get_client, observe
 from loguru import logger
 
 from docs_seeker.config.settings import settings
-from docs_seeker.domain.interfaces.retriever import Retriever
 from docs_seeker.infra.database.milvus_client import get_milvus_store
 from docs_seeker.infra.retrieval.metadata_filter import matches_metadata
+from docs_seeker.interfaces.retriever import Retriever
 from docs_seeker.models.chunk import Chunk
 
 

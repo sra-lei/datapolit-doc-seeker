@@ -1,7 +1,7 @@
 """RAG 使用统计单元测试（FakeStore，不依赖真实 Redis）"""
 
-from docs_seeker.domain.interfaces.usage import CallStats, UserCalls
-from docs_seeker.domain.services.usage import UsageTracker
+from docs_seeker.interfaces.usage import CallStats, UserCalls
+from docs_seeker.services.usage import UsageTracker
 
 
 class FakeStore:

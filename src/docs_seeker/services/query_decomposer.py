@@ -6,7 +6,7 @@ docs-seeker - 查询分解（领域服务）
 from loguru import logger
 
 from docs_seeker.config.settings import prompts, settings
-from docs_seeker.domain.interfaces.llm import LLMProvider
+from docs_seeker.interfaces.llm import LLMProvider
 from docs_seeker.models.llm import LLMRequest, LLMResponse
 from docs_seeker.models.query import Query
 

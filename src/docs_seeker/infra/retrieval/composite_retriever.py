@@ -9,11 +9,11 @@ from langfuse import get_client, observe
 from loguru import logger
 
 from docs_seeker.config.settings import retrieval_config
-from docs_seeker.domain.interfaces.retriever import Retriever
 from docs_seeker.infra.retrieval.bm25_retriever import BM25Retriever
 from docs_seeker.infra.retrieval.dense_retriever import DenseRetriever
 from docs_seeker.infra.retrieval.metadata_filter import build_milvus_expr
 from docs_seeker.infra.retrieval.summary_retriever import SummaryRetriever
+from docs_seeker.interfaces.retriever import Retriever
 from docs_seeker.models.chunk import Chunk
 
 _DEFAULT_WEIGHTS = {"dense": 0.5, "bm25": 0.3, "summary": 0.2}

@@ -15,9 +15,9 @@ from __future__ import annotations
 import pytest
 
 from docs_seeker.config.settings import Settings, settings
-from docs_seeker.domain.services.chat_service import ChatService
 from docs_seeker.models.chunk import Chunk
 from docs_seeker.models.query import Query
+from docs_seeker.services.chat_service import ChatService
 
 
 class _BoomRunner:

@@ -5,9 +5,9 @@ id → 管线按 `chunk.id or ""` 去重，把整条 BM25 召回静默归并成�
 查询带上 `id`（见 test_milvus_get_all_documents.py）+ 去重键的「来源+正文」指纹兜底。
 """
 
-from docs_seeker.domain.services.rag_pipeline import RAGPipeline, _dedup_key
 from docs_seeker.models.chunk import Chunk
 from docs_seeker.models.query import Query
+from docs_seeker.services.rag_pipeline import RAGPipeline, _dedup_key
 
 
 class _Retriever:

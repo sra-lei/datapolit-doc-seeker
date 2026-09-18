@@ -4,12 +4,6 @@ from langfuse.openai import OpenAI
 
 from docs_seeker.agent.runner import AgentRunner
 from docs_seeker.config.settings import settings
-from docs_seeker.domain.services.chat_service import ChatService
-from docs_seeker.domain.services.generator import Generator
-from docs_seeker.domain.services.guards import get_guard_chain
-from docs_seeker.domain.services.query_decomposer import QueryDecomposer
-from docs_seeker.domain.services.top_warmup import TopQuestionWarmup
-from docs_seeker.domain.services.usage import UsageTracker
 from docs_seeker.infra.cache.redis_lock import get_distributed_lock
 from docs_seeker.infra.cache.semantic_cache import get_semantic_cache
 from docs_seeker.infra.llm.client import LLMClient, build_transport_middlewares
@@ -17,6 +11,12 @@ from docs_seeker.infra.llm.middleware import CircuitBreaker
 from docs_seeker.infra.retrieval.composite_retriever import CompositeRetriever
 from docs_seeker.infra.retrieval.hybrid_router import HybridRouter
 from docs_seeker.infra.usage import get_usage_store
+from docs_seeker.services.chat_service import ChatService
+from docs_seeker.services.generator import Generator
+from docs_seeker.services.guards import get_guard_chain
+from docs_seeker.services.query_decomposer import QueryDecomposer
+from docs_seeker.services.top_warmup import TopQuestionWarmup
+from docs_seeker.services.usage import UsageTracker
 
 _composite_retriever: CompositeRetriever | None = None
 _generator: Generator | None = None
