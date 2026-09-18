@@ -4,8 +4,8 @@ from loguru import logger
 
 from docs_seeker.config.settings import prompts, settings
 from docs_seeker.domain.interfaces.llm import LLMProvider
-from docs_seeker.domain.models.chunk import Chunk
-from docs_seeker.domain.models.llm import LLMRequest, LLMResponse
+from docs_seeker.models.chunk import Chunk
+from docs_seeker.models.llm import LLMRequest, LLMResponse
 
 _DEFAULT_SYSTEM_PROMPT = (
     "你是一个专业的文档问答助手。请根据以下检索到的文档内容回答用户问题。\n"

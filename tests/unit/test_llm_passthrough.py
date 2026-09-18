@@ -21,8 +21,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from docs_seeker.domain.models.llm import LLMRequest, LLMResponse
 from docs_seeker.infra.llm.errors import AllModelsFailedError
+from docs_seeker.models.llm import LLMRequest, LLMResponse
 
 
 def _raw_response(content: str = "ok", finish: str = "stop", usage=None):

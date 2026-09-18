@@ -5,8 +5,8 @@ mock 三路检索器与检索配置，不依赖 Milvus / Redis / LLM。
 
 from unittest.mock import patch
 
-from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.infra.retrieval.composite_retriever import CompositeRetriever
+from docs_seeker.models.chunk import Chunk
 
 _CFG = {
     "rrf": {"k": 60, "weights": {"dense": 0.5, "bm25": 0.3, "summary": 0.2}},

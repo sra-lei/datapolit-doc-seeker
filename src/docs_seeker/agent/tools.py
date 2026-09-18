@@ -13,9 +13,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.domain.services.metadata import parse_question_metadata
 from docs_seeker.infra.retrieval.metadata_filter import matches_metadata
+from docs_seeker.models.chunk import Chunk
 
 _SNIPPET_CHARS = 350
 

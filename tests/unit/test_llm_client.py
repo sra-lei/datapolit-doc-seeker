@@ -12,7 +12,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from docs_seeker.config.settings import settings
-from docs_seeker.domain.models.llm import LLMRequest
+from docs_seeker.models.llm import LLMRequest
 
 
 def _response(content: str, finish: str = "stop"):

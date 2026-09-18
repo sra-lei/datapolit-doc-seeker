@@ -10,10 +10,10 @@ from loguru import logger
 
 from docs_seeker.config.settings import settings
 from docs_seeker.domain.interfaces.retriever import Retriever
-from docs_seeker.domain.models.chunk import Chunk
-from docs_seeker.domain.models.document import Document
 from docs_seeker.infra.database.milvus_client import get_milvus_store
 from docs_seeker.infra.embedding.embedder import get_embedder
+from docs_seeker.models.chunk import Chunk
+from docs_seeker.models.document import Document
 
 
 class SummaryRetriever(Retriever):

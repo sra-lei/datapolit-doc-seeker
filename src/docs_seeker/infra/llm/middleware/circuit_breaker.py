@@ -16,8 +16,8 @@ from threading import Lock
 
 from loguru import logger
 
-from docs_seeker.domain.models.llm import LLMRequest, LLMResponse
 from docs_seeker.infra.llm.middleware.base import CallNext, LLMCallContext
+from docs_seeker.models.llm import LLMRequest, LLMResponse
 
 
 class CircuitState(Enum):

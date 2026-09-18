@@ -21,9 +21,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from docs_seeker.domain.models.llm import LLMRequest
 from docs_seeker.infra.llm import client as client_module
 from docs_seeker.infra.llm.errors import AllModelsFailedError, LLMError
+from docs_seeker.models.llm import LLMRequest
 
 PROMPT = LLMRequest(messages=[{"role": "user", "content": "x"}])
 

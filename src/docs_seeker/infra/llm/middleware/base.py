@@ -22,7 +22,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
-from docs_seeker.domain.models.llm import LLMRequest, LLMResponse
+from docs_seeker.models.llm import LLMRequest, LLMResponse
 
 # 链路里「下一层」的调用形状；终端（终端 = 真正调 SDK 的那一层）也满足它
 CallNext = Callable[[LLMRequest], LLMResponse]

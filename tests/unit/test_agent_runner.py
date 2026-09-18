@@ -9,8 +9,8 @@ import pytest
 from docs_seeker.agent.runner import AgentError, AgentRunner
 from docs_seeker.agent.tools import default_tools
 from docs_seeker.config.settings import settings
-from docs_seeker.domain.models.chunk import Chunk
-from docs_seeker.domain.models.llm import LLMRequest, LLMResponse
+from docs_seeker.models.chunk import Chunk
+from docs_seeker.models.llm import LLMRequest, LLMResponse
 
 
 def _resp(content: str):

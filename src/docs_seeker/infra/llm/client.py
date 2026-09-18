@@ -26,7 +26,6 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from docs_seeker.domain.interfaces.llm import LLMProvider
-from docs_seeker.domain.models.llm import LLMRequest, LLMResponse
 from docs_seeker.domain.services.guards.base import GuardChain
 from docs_seeker.infra.llm.errors import AllModelsFailedError, LLMError
 from docs_seeker.infra.llm.middleware import (
@@ -43,6 +42,7 @@ from docs_seeker.infra.llm.middleware import (
     ObservabilityMiddleware,
     RetryMiddleware,
 )
+from docs_seeker.models.llm import LLMRequest, LLMResponse
 
 if TYPE_CHECKING:  # 仅用于类型标注：真实构造在组装点（api/deps.py）
     from langfuse.openai import OpenAI

@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
-from docs_seeker.domain.models.chunk import Chunk
+from docs_seeker.models.chunk import Chunk
 
 
 class Role(str, Enum):

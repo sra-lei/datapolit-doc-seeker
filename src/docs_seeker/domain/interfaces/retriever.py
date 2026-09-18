@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from docs_seeker.domain.models.chunk import Chunk
+from docs_seeker.models.chunk import Chunk
 
 
 class Retriever(ABC):

@@ -12,7 +12,7 @@ LLM 调用契约。数据模型（``LLMRequest`` / ``LLMResponse``）在 ``domai
 
 from abc import ABC, abstractmethod
 
-from docs_seeker.domain.models.llm import LLMRequest, LLMResponse
+from docs_seeker.models.llm import LLMRequest, LLMResponse
 
 
 class LLMProvider(ABC):
