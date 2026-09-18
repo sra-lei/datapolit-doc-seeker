@@ -147,7 +147,7 @@ def main() -> int:
     print(f"用例数: {len(cases)} | top_k={args.top_k} workers={args.workers}", flush=True)
 
     from docs_seeker.api.deps import get_chat_service  # 延迟 import：需 PYTHONPATH=src
-    from docs_seeker.core.config import settings
+    from docs_seeker.config.settings import settings
 
     service = get_chat_service()
 

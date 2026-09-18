@@ -8,7 +8,7 @@ os.environ.setdefault("LANGFUSE_TRACING_ENABLED", "false")
 
 import pytest  # noqa: E402
 
-from docs_seeker.core.config import settings  # noqa: E402
+from docs_seeker.config.settings import settings  # noqa: E402
 from docs_seeker.domain.services.guards import get_guard_chain  # noqa: E402
 from docs_seeker.infra.llm.client import LLMClient, build_transport_middlewares  # noqa: E402
 from docs_seeker.infra.llm.middleware import CircuitBreaker  # noqa: E402

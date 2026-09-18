@@ -17,7 +17,7 @@ import argparse
 import time
 
 from docs_seeker.api.deps import get_llm_client
-from docs_seeker.core.config import settings
+from docs_seeker.config.settings import settings
 from docs_seeker.domain.models.llm import LLMRequest
 from docs_seeker.domain.services.generator import Generator
 from docs_seeker.domain.services.query_decomposer import QueryDecomposer

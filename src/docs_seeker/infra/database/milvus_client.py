@@ -8,7 +8,7 @@ from typing import Any
 from loguru import logger
 from pymilvus import MilvusClient
 
-from docs_seeker.core.config import settings
+from docs_seeker.config.settings import settings
 
 
 class MilvusStore:

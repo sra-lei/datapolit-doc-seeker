@@ -10,7 +10,7 @@ from array import array
 from langfuse import get_client, observe
 from loguru import logger
 
-from docs_seeker.core.config import settings
+from docs_seeker.config.settings import settings
 from docs_seeker.core.metrics import cache_hits_total, cache_misses_total
 from docs_seeker.domain.interfaces.cache import SemanticCachePort
 from docs_seeker.infra.cache.redis_client import get_redis_client

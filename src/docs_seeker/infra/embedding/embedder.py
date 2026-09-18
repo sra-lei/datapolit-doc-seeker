@@ -8,7 +8,7 @@ embedding 观测（模型名、token 用量），纳入 Langfuse 链路。
 from langfuse.openai import OpenAI
 from loguru import logger
 
-from docs_seeker.core.config import settings
+from docs_seeker.config.settings import settings
 from docs_seeker.domain.interfaces.embedder import EmbeddingProvider
 
 

@@ -23,7 +23,7 @@ import sys
 import time
 from pathlib import Path
 
-from docs_seeker.core.config import settings
+from docs_seeker.config.settings import settings
 
 DEFAULT_CASES = Path(__file__).resolve().parent / "cases" / "eval-set-v2.json"
 

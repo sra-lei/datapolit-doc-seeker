@@ -23,7 +23,7 @@ import sys
 os.environ.setdefault("LANGFUSE_TRACING_ENABLED", "false")
 
 from docs_seeker.api.deps import build_llm_client  # noqa: E402
-from docs_seeker.core.config import settings  # noqa: E402
+from docs_seeker.config.settings import settings  # noqa: E402
 from docs_seeker.domain.models.llm import LLMRequest  # noqa: E402
 
 PROMPT = [{"role": "user", "content": "只回复两个字：收到"}]

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from loguru import logger
 
-from docs_seeker.core.config import settings
+from docs_seeker.config.settings import settings
 from docs_seeker.core.security import check_injection_patterns, check_off_topic, desensitize
 from docs_seeker.domain.services.guards.base import (
     SUBJECT_ANSWER,

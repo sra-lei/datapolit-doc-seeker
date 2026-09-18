@@ -146,4 +146,4 @@ prompts = _load_yaml("prompts.yaml")
 # 检索策略配置（RRF 权重/k、单路召回参数等）
 retrieval_config = _load_yaml("retrieval.yaml")
 
-__all__ = ["Settings", "settings", "prompts", "retrieval_config"]
+__all__ = ["settings", "prompts", "retrieval_config"]

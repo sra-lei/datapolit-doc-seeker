@@ -3,7 +3,7 @@
 from langfuse.openai import OpenAI
 
 from docs_seeker.agent.runner import AgentRunner
-from docs_seeker.core.config import settings
+from docs_seeker.config.settings import settings
 from docs_seeker.domain.services.chat_service import ChatService
 from docs_seeker.domain.services.generator import Generator
 from docs_seeker.domain.services.guards import get_guard_chain

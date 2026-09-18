@@ -9,7 +9,7 @@ from loguru import logger
 from docs_seeker.api.deps import get_composite_retriever, get_top_warmup
 from docs_seeker.api.middleware import RequestLoggingMiddleware
 from docs_seeker.api.routes import router
-from docs_seeker.core.config import settings
+from docs_seeker.config.settings import settings
 from docs_seeker.core.metrics import metrics_response
 from docs_seeker.infra.logger.logging import setup_logging
 from docs_seeker.infra.tracker.langfuse import shutdown_langfuse

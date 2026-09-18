@@ -16,7 +16,7 @@ import threading
 
 from loguru import logger
 
-from docs_seeker.core.config import settings
+from docs_seeker.config.settings import settings
 from docs_seeker.domain.interfaces.lock import DistributedLock
 from docs_seeker.domain.services.chat_service import CACHE_FIELDS, ChatService
 from docs_seeker.domain.services.guards import ANSWER_CTX

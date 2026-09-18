@@ -19,7 +19,7 @@ from types import SimpleNamespace
 import pytest
 
 from docs_seeker.api import deps as deps_module
-from docs_seeker.core.config import settings
+from docs_seeker.config.settings import settings
 
 
 class _FakeSdk:

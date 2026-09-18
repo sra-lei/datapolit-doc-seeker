@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass, field
 from langfuse import get_client, observe, propagate_attributes
 from loguru import logger
 
-from docs_seeker.core.config import settings
+from docs_seeker.config.settings import settings
 from docs_seeker.domain.interfaces.cache import SemanticCachePort
 from docs_seeker.domain.interfaces.retriever import Retriever
 from docs_seeker.domain.services.generator import Generator, compute_confidence

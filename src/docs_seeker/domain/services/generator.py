@@ -2,7 +2,7 @@
 
 from loguru import logger
 
-from docs_seeker.core.config import prompts, settings
+from docs_seeker.config.settings import prompts, settings
 from docs_seeker.domain.interfaces.llm import LLMProvider
 from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.domain.models.llm import LLMRequest, LLMResponse

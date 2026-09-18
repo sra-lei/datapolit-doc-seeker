@@ -7,7 +7,7 @@ autouse fixture 保证。
 
 from unittest.mock import patch
 
-from docs_seeker.core.config import settings
+from docs_seeker.config.settings import settings
 from docs_seeker.infra.retrieval.bm25_retriever import BM25Retriever
 
 DOCS_A = [

@@ -8,7 +8,7 @@ from typing import Any
 from langfuse import get_client, observe
 from loguru import logger
 
-from docs_seeker.core.config import retrieval_config
+from docs_seeker.config.settings import retrieval_config
 from docs_seeker.domain.interfaces.retriever import Retriever
 from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.infra.retrieval.bm25_retriever import BM25Retriever

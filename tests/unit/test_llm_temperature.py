@@ -15,7 +15,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from docs_seeker.core.config import Settings, settings
+from docs_seeker.config.settings import Settings, settings
 from docs_seeker.domain.models.chunk import Chunk
 from docs_seeker.domain.models.llm import LLMRequest, LLMResponse
 from docs_seeker.domain.services.generator import Generator

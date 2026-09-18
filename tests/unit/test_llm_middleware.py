@@ -22,7 +22,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from docs_seeker.core.config import settings
+from docs_seeker.config.settings import settings
 from docs_seeker.domain.models.llm import LLMRequest
 from docs_seeker.infra.llm.client import build_transport_middlewares
 from docs_seeker.infra.llm.errors import AllModelsFailedError

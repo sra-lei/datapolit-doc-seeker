@@ -6,7 +6,7 @@
 
 from unittest.mock import patch
 
-from docs_seeker.core.config import settings
+from docs_seeker.config.settings import settings
 from docs_seeker.infra.cache.semantic_cache import SemanticCache
 
 

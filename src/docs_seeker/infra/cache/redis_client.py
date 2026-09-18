@@ -2,7 +2,7 @@
 
 import redis
 
-from docs_seeker.core.config import settings
+from docs_seeker.config.settings import settings
 
 _redis_client: redis.Redis | None = None
 
