@@ -16,12 +16,12 @@ from __future__ import annotations
 import argparse
 import time
 
+from docs_seeker.api.deps import get_llm_client
 from docs_seeker.core.config import settings
 from docs_seeker.domain.models.llm import LLMRequest
 from docs_seeker.domain.services.generator import Generator
 from docs_seeker.domain.services.query_decomposer import QueryDecomposer
 from docs_seeker.domain.services.rag_pipeline import RAGPipeline
-from docs_seeker.infra.llm.client import get_llm_client
 
 DEFAULT_Q = "我准备注册亚马逊卖家账户，身份验证时对上传的营业执照和法人身份证照片有什么具体要求？"
 

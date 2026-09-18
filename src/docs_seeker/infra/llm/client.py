@@ -1,10 +1,12 @@
 """
 docs-seeker - LLM 客户端
 统一调用入口：客户端本身只做三件事 —— **组 payload → 调 SDK → 包信封**；
-重试 / 熔断 / 降级 / 观测等策略全部下沉为可插拔 middleware（Phase 1）。
+重试 / 熔断 / 降级 / 观测等策略全部下沉为可插拔 middleware。
 
-已接入 Langfuse 链路追踪：OpenAI 客户端使用 langfuse.openai 的 drop-in 包装，
-自动把每次模型调用记录为 generation 观测（模型名、token 用量、耗时、错误）。
+⚠️ **本模块不读配置、不构造 SDK 客户端**：SDK 客户端、模型名、熔断器、默认超时、
+middleware 链**全部由组装点显式传入**（``docs_seeker/api/deps.py::build_llm_client``），
+构造参数一律**无默认值** —— 缺参数直接 TypeError，不让「默认值悄悄生效」把
+「配置没接上」变成静默失败。
 
 设计约定（方案见 ``docs/llm-gateway-guard-refactor.md``）：
 - **参数透明**：常用字段过滤 ``None`` 后下发，``request.extra`` 原样合并 —— 不做
@@ -15,18 +17,17 @@ docs-seeker - LLM 客户端
   ``fallback_used`` / ``attempts`` / ``applied_middlewares`` 显式暴露，不静默。
 """
 
-import os
+from __future__ import annotations
+
 import time
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
-from dotenv import load_dotenv
-from langfuse.openai import OpenAI
 from loguru import logger
 
-from docs_seeker.core.config import settings
 from docs_seeker.domain.interfaces.llm import LLMProvider
 from docs_seeker.domain.models.llm import LLMRequest, LLMResponse
-from docs_seeker.domain.services.guards import get_guard_chain
+from docs_seeker.domain.services.guards.base import GuardChain
 from docs_seeker.infra.llm.errors import AllModelsFailedError, LLMError
 from docs_seeker.infra.llm.middleware import (
     BudgetGuardMiddleware,
@@ -43,7 +44,8 @@ from docs_seeker.infra.llm.middleware import (
     RetryMiddleware,
 )
 
-load_dotenv()
+if TYPE_CHECKING:  # 仅用于类型标注：真实构造在组装点（api/deps.py）
+    from langfuse.openai import OpenAI
 
 __all__ = [
     "AllModelsFailedError",
@@ -52,33 +54,35 @@ __all__ = [
     "CircuitState",
     "LLMError",
     "LLMClient",
-    "default_transport_middlewares",
-    "get_llm_client",
+    "build_transport_middlewares",
 ]
 
 
 class LLMClient(LLMProvider):
-    """LLM 客户端：透明传输 + 可插拔策略链。"""
+    """LLM 客户端：透明传输 + 可插拔策略链（依赖全部由组装点注入）。"""
 
-    def __init__(self, middlewares: list[LLMMiddleware] | None = None):
-        self.primary_client = OpenAI(api_key=settings.deepseek_api_key, base_url=settings.deepseek_base_url)
-        self.primary_model = settings.llm_model
+    def __init__(
+        self,
+        *,
+        primary_client: OpenAI,
+        primary_model: str,
+        fallback_client: OpenAI | None,
+        fallback_model: str,
+        circuit_breaker: CircuitBreaker,
+        default_timeout: float,
+        middlewares: list[LLMMiddleware],
+    ) -> None:
+        self.primary_client = primary_client
+        self.primary_model = primary_model
         self.primary_provider = "primary"
-        self.fallback_client = None
-        fk = os.getenv("FALLBACK_API_KEY", "")
-        fu = os.getenv("FALLBACK_BASE_URL", "")
-        if fk and fu:
-            self.fallback_client = OpenAI(api_key=fk, base_url=fu)
-        self.fallback_model = os.getenv("FALLBACK_MODEL", "deepseek-chat")
-        self.circuit_breaker = CircuitBreaker(
-            failure_threshold=settings.llm_circuit_failure_threshold,
-            recovery_timeout=settings.llm_circuit_recovery_seconds,
-        )
+        self.fallback_client = fallback_client
+        self.fallback_model = fallback_model
+        self.circuit_breaker = circuit_breaker
+        self.default_timeout = default_timeout
         self.total_calls = 0
         self.success_calls = 0
         self.fallback_calls = 0
-        # 传入 middlewares 可完全自定义链路（测试 / 特殊部署）；缺省走默认链
-        self.middlewares = list(middlewares) if middlewares is not None else default_transport_middlewares(self)
+        self.middlewares = list(middlewares)
         self._chain = MiddlewareChain(self.middlewares)
 
     # ---- 对外入口 ----
@@ -91,7 +95,7 @@ class LLMClient(LLMProvider):
         覆盖只影响本次调用 —— 生成层走非推理模型降延迟/成本，而「判断/改写」仍用
         `LLM_MODEL` 指定的推理模型；降级时沿用本次覆盖的模型名。
 
-        ``request.timeout`` 非空时覆盖全局超时（判断类调用传 LLM_JUDGE_TIMEOUT_SECONDS
+        ``request.timeout`` 非空时覆盖默认超时（判断类调用传 LLM_JUDGE_TIMEOUT_SECONDS
         快速失败走回退，避免 120s × 重试卡住调用方循环）。
         """
         self.total_calls += 1
@@ -142,9 +146,9 @@ class LLMClient(LLMProvider):
             "max_tokens": request.max_tokens,
             "temperature": request.temperature,
             "stream": request.stream,
-            # 推理模型响应时间波动大（实测 10~60s），超时配置化，默认 120s；
+            # 推理模型响应时间波动大（实测 10~60s），默认超时由组装点从配置注入；
             # 判断类调用可传短超时覆盖（LLM_JUDGE_TIMEOUT_SECONDS）
-            "timeout": request.timeout if request.timeout is not None else settings.llm_timeout_seconds,
+            "timeout": request.timeout if request.timeout is not None else self.default_timeout,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         payload.update(request.extra or {})
@@ -171,8 +175,17 @@ class LLMClient(LLMProvider):
         }
 
 
-def default_transport_middlewares(client: LLMClient) -> list[LLMMiddleware]:
-    """默认 transport 链（列表顺序 = 外层到内层）。
+def build_transport_middlewares(
+    *,
+    guard_chain: GuardChain,
+    breaker: CircuitBreaker,
+    has_fallback: Callable[[], bool],
+    names: str,
+) -> list[LLMMiddleware]:
+    """按配置名组装 transport 链（列表顺序 = 外层到内层）。
+
+    这是**纯组装函数**：依赖全部由调用方传入（组装点读配置后在这里落地），
+    本身不读 ``settings``。``names`` 为逗号分隔的 middleware 名，空 = 默认全链。
 
     ``guard``（扫 messages，仅告警）→ ``observability``（观测参数）→ ``fallback``
     （主备降级）→ ``circuit_breaker``（每个逻辑调用记一次成败）→ ``budget_guard``
@@ -185,27 +198,17 @@ def default_transport_middlewares(client: LLMClient) -> list[LLMMiddleware]:
     例 ``LLM_TRANSPORT_MIDDLEWARES=observability,retry`` 即关掉护栏/降级/熔断/预算兜底。
     """
     registry: dict[str, Callable[[], LLMMiddleware]] = {
-        "guard": lambda: LLMGuardMiddleware(get_guard_chain()),
+        "guard": lambda: LLMGuardMiddleware(guard_chain),
         "observability": ObservabilityMiddleware,
-        "fallback": lambda: FallbackMiddleware(lambda: client.fallback_client is not None),
-        "circuit_breaker": lambda: CircuitBreakerMiddleware(client.circuit_breaker),
+        "fallback": lambda: FallbackMiddleware(has_fallback),
+        "circuit_breaker": lambda: CircuitBreakerMiddleware(breaker),
         "budget_guard": BudgetGuardMiddleware,
         "retry": RetryMiddleware,
     }
-    names = [n.strip() for n in (settings.llm_transport_middlewares or "").split(",") if n.strip()]
-    if not names:
-        names = list(registry)
-    unknown = [n for n in names if n not in registry]
+    wanted = [n.strip() for n in (names or "").split(",") if n.strip()]
+    if not wanted:
+        wanted = list(registry)
+    unknown = [n for n in wanted if n not in registry]
     if unknown:
         logger.warning(f"未知的 LLM transport middleware {unknown}，已忽略")
-    return [registry[n]() for n in names if n in registry]
-
-
-_llm_client: LLMClient | None = None
-
-
-def get_llm_client() -> LLMClient:
-    global _llm_client
-    if _llm_client is None:
-        _llm_client = LLMClient()
-    return _llm_client
+    return [registry[n]() for n in wanted if n in registry]

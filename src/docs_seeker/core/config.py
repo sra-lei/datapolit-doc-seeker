@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     #       circuit_breaker（熔断）/ budget_guard（截断预算兜底）/ retry（退避重试）。
     # 例：LLM_TRANSPORT_MIDDLEWARES=observability,retry 可临时关掉降级与熔断。
     llm_transport_middlewares: str = ""
+    # 备用 provider（主模型失败/熔断打开时的降级目标）。
+    # ⚠️ api_key 与 base_url **都配**才启用备用；未配时熔断打开期间请求直接失败。
+    fallback_api_key: str = ""
+    fallback_base_url: str = ""
+    fallback_model: str = "deepseek-chat"
     # 熔断阈值（连续失败多少次打开熔断）与冷却时长（秒，冷却后半开试探一次）。
     # ⚠️ 未配 FALLBACK_* 时，熔断打开期间请求会直接失败（不再打后端），
     # 这是熔断的预期行为；若希望故障期继续对外服务，请配备用 provider。

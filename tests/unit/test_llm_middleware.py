@@ -9,7 +9,10 @@
 - **降级**：主模型失败 → 备用 provider，``fallback_used`` 在信封上可见；
 - **可插拔**：``LLM_TRANSPORT_MIDDLEWARES`` 可裁剪链路。
 
-不依赖真实 API：假 OpenAI 客户端只记录调用参数。
+重构（2026-09-18）后客户端不再自读配置：SDK 与 middleware 链由组装点注入，
+本文件用 ``make_llm_client`` 夹具直接注入假 SDK —— 不再 monkeypatch ``OpenAI``。
+
+不依赖真实 API。
 """
 # pyright: reportArgumentType=false
 
@@ -21,7 +24,7 @@ import pytest
 
 from docs_seeker.core.config import settings
 from docs_seeker.domain.models.llm import LLMRequest
-from docs_seeker.infra.llm import client as client_module
+from docs_seeker.infra.llm.client import build_transport_middlewares
 from docs_seeker.infra.llm.errors import AllModelsFailedError
 from docs_seeker.infra.llm.middleware import CircuitState
 
@@ -61,53 +64,22 @@ class _FakeOpenAI:
         self.chat = SimpleNamespace(completions=_Completions())
 
 
-@pytest.fixture
-def install(monkeypatch):
-    """安装假客户端；返回 (sink, 构造客户端的工厂)"""
-    sink: list[dict] = []
-    monkeypatch.setattr(client_module.time, "sleep", lambda _s: None)  # 跳过退避等待
-    monkeypatch.setattr(client_module, "OpenAI", lambda **kwargs: _FakeOpenAI(sink))
-    return sink
-
-
-@pytest.fixture
-def install_multi(monkeypatch):
-    """按构造顺序返回不同客户端（用于主/备双客户端场景）"""
-    sink: list[dict] = []
-    monkeypatch.setattr(client_module.time, "sleep", lambda _s: None)
-    clients: list[_FakeOpenAI] = []
-
-    def factory(**kwargs):
-        client = _FakeOpenAI(sink)
-        clients.append(client)
-        clients[0].fail_times = 99  # 第一个构造 = 主客户端：永远失败
-        return client
-
-    monkeypatch.setattr(client_module, "OpenAI", factory)
-    return sink, clients
-
-
 # ------------------------------------------------------------------ #
 #  重试
 # ------------------------------------------------------------------ #
-def test_retry_succeeds_after_transient_failures(install) -> None:
-    client = client_module.LLMClient()
-    client.primary_client.fail_times = 2
+def test_retry_succeeds_after_transient_failures(make_llm_client) -> None:
+    sink: list[dict] = []
+    client = make_llm_client(_FakeOpenAI(sink, fail_times=2))
     resp = client.generate(PROMPT)
     assert resp.text == "ok"
     assert resp.attempts == 3
-    assert len(install) == 3
+    assert len(sink) == 3
 
 
-def test_non_retryable_error_fails_fast(install, monkeypatch) -> None:
+def test_non_retryable_error_fails_fast(make_llm_client) -> None:
     """鉴权 / 参数错误不该退避重试（旧实现一律重试 3 次，白等 7 秒）"""
-    monkeypatch.delenv("FALLBACK_API_KEY", raising=False)
-    monkeypatch.delenv("FALLBACK_BASE_URL", raising=False)
-    sink = install
-    sink.clear()
-    client = client_module.LLMClient()
-    client.primary_client.fail_times = 99
-    client.primary_client._error_factory = _AuthError
+    sink: list[dict] = []
+    client = make_llm_client(_FakeOpenAI(sink, fail_times=99, error_factory=_AuthError))
     with pytest.raises(AllModelsFailedError):
         client.generate(PROMPT)
     assert len(sink) == 1  # 没有重试
@@ -116,14 +88,10 @@ def test_non_retryable_error_fails_fast(install, monkeypatch) -> None:
 # ------------------------------------------------------------------ #
 #  熔断
 # ------------------------------------------------------------------ #
-def test_circuit_breaker_opens_and_fails_fast(install, monkeypatch) -> None:
-    monkeypatch.delenv("FALLBACK_API_KEY", raising=False)
-    monkeypatch.delenv("FALLBACK_BASE_URL", raising=False)
-    sink = install
-    sink.clear()
-    client = client_module.LLMClient()
+def test_circuit_breaker_opens_and_fails_fast(make_llm_client) -> None:
+    sink: list[dict] = []
+    client = make_llm_client(_FakeOpenAI(sink, fail_times=99))
     client.circuit_breaker.failure_threshold = 2
-    client.primary_client.fail_times = 99
 
     for _ in range(2):  # 两次逻辑调用（内部各重试 4 次）
         with pytest.raises(AllModelsFailedError):
@@ -136,14 +104,10 @@ def test_circuit_breaker_opens_and_fails_fast(install, monkeypatch) -> None:
     assert len(sink) == calls_before  # 熔断打开：直接拒绝，没有再打 SDK
 
 
-def test_circuit_breaker_half_open_recovers(install, monkeypatch) -> None:
-    monkeypatch.delenv("FALLBACK_API_KEY", raising=False)
-    monkeypatch.delenv("FALLBACK_BASE_URL", raising=False)
-    sink = install
-    sink.clear()
-    client = client_module.LLMClient()
+def test_circuit_breaker_half_open_recovers(make_llm_client) -> None:
+    sink: list[dict] = []
+    client = make_llm_client(_FakeOpenAI(sink, fail_times=99))
     client.circuit_breaker.failure_threshold = 1
-    client.primary_client.fail_times = 99
     with pytest.raises(AllModelsFailedError):
         client.generate(PROMPT)
     assert client.circuit_breaker.state is CircuitState.OPEN
@@ -160,12 +124,13 @@ def test_circuit_breaker_half_open_recovers(install, monkeypatch) -> None:
 # ------------------------------------------------------------------ #
 #  降级
 # ------------------------------------------------------------------ #
-def test_fallback_switches_provider_and_marks_envelope(install_multi, monkeypatch) -> None:
-    monkeypatch.setenv("FALLBACK_API_KEY", "fk")
-    monkeypatch.setenv("FALLBACK_BASE_URL", "https://fallback.example/v1")
-    monkeypatch.setenv("FALLBACK_MODEL", "fallback-model")
-    sink, clients = install_multi
-    client = client_module.LLMClient()
+def test_fallback_switches_provider_and_marks_envelope(make_llm_client) -> None:
+    sink: list[dict] = []
+    client = make_llm_client(
+        _FakeOpenAI(sink, fail_times=99),
+        fallback_client=_FakeOpenAI(sink),
+        fallback_model="fallback-model",
+    )
 
     resp = client.generate(PROMPT)
 
@@ -177,52 +142,77 @@ def test_fallback_switches_provider_and_marks_envelope(install_multi, monkeypatc
 
 
 # ------------------------------------------------------------------ #
-#  熔断参数配置化
-# ------------------------------------------------------------------ #
-def test_circuit_breaker_params_come_from_settings(install, monkeypatch) -> None:
-    monkeypatch.setattr(settings, "llm_circuit_failure_threshold", 9)
-    monkeypatch.setattr(settings, "llm_circuit_recovery_seconds", 120)
-    client = client_module.LLMClient()
-    assert client.circuit_breaker.failure_threshold == 9
-    assert client.circuit_breaker.recovery_timeout == 120
-
-
-# ------------------------------------------------------------------ #
 #  可插拔
 # ------------------------------------------------------------------ #
-def test_default_chain_order(install) -> None:
-    client = client_module.LLMClient()
+def test_default_chain_order(make_llm_client) -> None:
+    sink: list[dict] = []
+    client = make_llm_client(_FakeOpenAI(sink))
     expected = ["guard", "observability", "fallback", "circuit_breaker", "budget_guard", "retry"]
     assert [m.name for m in client.middlewares] == expected
     resp = client.generate(PROMPT)
     assert resp.applied_middlewares == expected
 
 
-def test_chain_can_be_trimmed_by_settings(install, monkeypatch) -> None:
-    """LLM_TRANSPORT_MIDDLEWARES 可裁剪策略链（真可插拔）"""
-    monkeypatch.setattr(settings, "llm_transport_middlewares", "observability")
-    sink = install
-    sink.clear()
-    client = client_module.LLMClient()
+def test_chain_can_be_trimmed_by_settings(make_llm_client) -> None:
+    """``LLM_TRANSPORT_MIDDLEWARES`` 可裁剪策略链（组装点把配置名传给组装函数）"""
+    sink: list[dict] = []
+    client = make_llm_client(_FakeOpenAI(sink, fail_times=99), middleware_names="observability")
     assert [m.name for m in client.middlewares] == ["observability"]
 
-    client.primary_client.fail_times = 99
     with pytest.raises(TimeoutError):  # 无 retry / fallback：原始错误直接冒泡
         client.generate(PROMPT)
     assert len(sink) == 1
 
 
-def test_middlewares_can_be_injected_explicitly(install) -> None:
+def test_middlewares_can_be_injected_explicitly(make_llm_client) -> None:
     from docs_seeker.infra.llm.middleware import ObservabilityMiddleware
 
-    client = client_module.LLMClient(middlewares=[ObservabilityMiddleware()])
+    sink: list[dict] = []
+    client = make_llm_client(_FakeOpenAI(sink), middlewares=[ObservabilityMiddleware()])
     assert [m.name for m in client.middlewares] == ["observability"]
 
 
-def test_observability_injects_stream_options_only_when_streaming(install) -> None:
-    client = client_module.LLMClient()
+def test_unknown_middleware_name_is_ignored(make_llm_client) -> None:
+    sink: list[dict] = []
+    client = make_llm_client(_FakeOpenAI(sink), middleware_names="observability,nope")
+    assert [m.name for m in client.middlewares] == ["observability"]
+
+
+def test_build_transport_middlewares_is_pure(make_llm_client) -> None:
+    """组装函数不读 settings：全部依赖由入参决定（配置读取在组装点）"""
+    from docs_seeker.domain.services.guards import get_guard_chain
+    from docs_seeker.infra.llm.middleware import CircuitBreaker
+
+    breaker = CircuitBreaker(failure_threshold=3)
+    chain = build_transport_middlewares(
+        guard_chain=get_guard_chain(),
+        breaker=breaker,
+        has_fallback=lambda: True,
+        names="circuit_breaker,fallback",
+    )
+    assert [m.name for m in chain] == ["circuit_breaker", "fallback"]
+
+
+def test_observability_injects_stream_options_only_when_streaming(make_llm_client) -> None:
+    sink: list[dict] = []
+    client = make_llm_client(_FakeOpenAI(sink))
     client.generate(PROMPT)
-    assert "stream_options" not in install[-1]
+    assert "stream_options" not in sink[-1]
 
     client.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], stream=True))
-    assert install[-1]["stream_options"] == {"include_usage": True}
+    assert sink[-1]["stream_options"] == {"include_usage": True}
+
+
+def test_empty_middleware_names_means_default_chain(make_llm_client) -> None:
+    """空配置 = 默认全链（与生产 settings 默认口径一致）"""
+    sink: list[dict] = []
+    client = make_llm_client(_FakeOpenAI(sink), middleware_names="")
+    assert [m.name for m in client.middlewares] == [
+        "guard",
+        "observability",
+        "fallback",
+        "circuit_breaker",
+        "budget_guard",
+        "retry",
+    ]
+    assert settings.llm_transport_middlewares == ""  # 生产默认口径

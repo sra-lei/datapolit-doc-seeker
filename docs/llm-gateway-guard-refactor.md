@@ -397,3 +397,38 @@ domain/services/
   （case 级 ±1-2 例属噪声）。若要主张收益，需另做单变量实验或同口径多轮对照。
 - **未做**：正规全量镜像重建（留给 CNB CI）。
 
+### Phase 6（client 去默认参数：配置读取与初始化收归组装点）✅ 2026-09-18
+
+**动机**：`LLMClient.__init__` 自读 `settings` / 环境变量并自建 SDK 客户端 ——
+「默认值悄悄生效」会把「配置没接上」变成静默失败（例如 `FALLBACK_*` 从 `os.getenv`
+裸读，`.env` 里配了但字段名不一致就静默无备用）。本次把**配置读取与客户端初始化
+全部收归组装点** `api/deps.py::build_llm_client`，客户端构造参数**一律无默认值**。
+
+- **`client.py` 变成纯组件**：移除 `settings` / `os` / `OpenAI` 运行时导入（SDK 类型只在
+  `TYPE_CHECKING` 下引用）；`LLMClient.__init__` 改为 7 个**必填关键字参数**：
+  `primary_client` / `primary_model` / `fallback_client` / `fallback_model` /
+  `circuit_breaker` / `default_timeout` / `middlewares`。漏传直接 `TypeError`。
+- **默认超时成为构造参数**：原来 `_build_payload` 现读 `settings.llm_timeout_seconds`，
+  现在由组装点注入为 `default_timeout`（`request.timeout` 覆盖语义不变）。
+- **middleware 组装函数变纯函数**：`default_transport_middlewares(client)` 改为
+  `build_transport_middlewares(*, guard_chain, breaker, has_fallback, names)` ——
+  不读 `settings`，逗号解析/未知名告警等**策略仍留在 infra**，配置值由组装点传入。
+- **备用 provider 进 `Settings`**：新增 `fallback_api_key` / `fallback_base_url` /
+  `fallback_model`（env 名不变：`FALLBACK_API_KEY` / `FALLBACK_BASE_URL` / `FALLBACK_MODEL`），
+  不再从 `os.getenv` 裸读；**api_key 与 base_url 都配才启用备用**（显式化，含注释）。
+- **`get_llm_client` 单例移到 `api/deps.py`**：导入点同步改为 deps ——
+  `api/routes/stats.py`、`agent/agent_loop.py`、`scripts/eval/{probe_latency_breakdown,
+  probe_case_evidence,run_agent_eval}.py`、`scripts/smoke_gateway.py`（改用 `build_llm_client()`）。
+  无循环依赖：`deps → agent.runner → infra`，编排层不反向依赖组装点。
+- **测试改造**（假 SDK 直接注入，不再 monkeypatch `client_module.OpenAI` / 操作 `FALLBACK_*` env）：
+  新增 `tests/conftest.py::make_llm_client` 夹具（组装等价于生产、SDK 可替换，并统一 patch
+  `retry.time.sleep` 跳过退避）；新增 `tests/unit/test_llm_wiring.py`（8 项）专门锁
+  「settings → 组装」这条接线：熔断参数 / 默认超时 / 主模型与 SDK 配置 / 备用 provider
+  「只配一个 = 没配」/ 链裁剪 / 空配置 = 默认链 / 单例 / **漏传参数必须报错**。
+- **验证**：`ruff check src tests scripts` 通过；`pytest tests/unit` **169 passed**
+  （重构前 157，净增 12：wiring 8 + 链相关 4）。导入冒烟：`build_llm_client()` 读到
+  `chain=[guard, observability, fallback, circuit_breaker, budget_guard, retry]`、
+  `default_timeout=120.0`、`breaker=5/60`、备用未配 = `None`；`api.main` 正常导入。
+- **未做**：真实 API 冒烟（`scripts/smoke_gateway.py`，需 key）与线上镜像重建（留给 CNB CI）。
+
+

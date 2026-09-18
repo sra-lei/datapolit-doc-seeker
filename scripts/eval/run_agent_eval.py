@@ -75,9 +75,8 @@ def main() -> int:
     import run_local_baseline as judge_lib  # noqa: E402
 
     from docs_seeker.agent.runner import AgentRunner  # noqa: E402
-    from docs_seeker.api.deps import get_composite_retriever  # noqa: E402
+    from docs_seeker.api.deps import get_composite_retriever, get_llm_client  # noqa: E402
     from docs_seeker.core.config import settings  # noqa: E402
-    from docs_seeker.infra.llm.client import get_llm_client  # noqa: E402
 
     if args.max_steps is not None:
         settings.agent_max_steps = args.max_steps

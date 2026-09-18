@@ -8,6 +8,9 @@
 - ``retryable`` 反映错误性质（4xx 鉴权/参数类为 False）；
 - ``__cause__`` 保留底层原始异常（历史实现用 ``from None`` 抹掉过异常链）。
 
+重构后客户端不再自读配置（备用 provider 由组装点注入）：本文件用 ``make_llm_client``
+夹具直接注入假 SDK，不再 monkeypatch ``OpenAI`` / 操作 FALLBACK_* 环境变量。
+
 不依赖真实 API。
 """
 # pyright: reportArgumentType=false
@@ -54,26 +57,18 @@ class _FakeOpenAI:
         self.chat = SimpleNamespace(completions=_Completions())
 
 
-@pytest.fixture
-def no_fallback(monkeypatch):
-    monkeypatch.delenv("FALLBACK_API_KEY", raising=False)
-    monkeypatch.delenv("FALLBACK_BASE_URL", raising=False)
-    monkeypatch.setattr(client_module.time, "sleep", lambda _s: None)
-
-
-def _primary_only_client(monkeypatch, error_factory=None) -> client_module.LLMClient:
+def _primary_only_client(make_llm_client, error_factory=None):
+    """只配主模型（无备用）的客户端"""
     sink: list[dict] = []
-    monkeypatch.setattr(
-        client_module, "OpenAI", lambda **kwargs: _FakeOpenAI(sink, fail_times=99, error_factory=error_factory)
-    )
-    return client_module.LLMClient()
+    client = make_llm_client(_FakeOpenAI(sink, fail_times=99, error_factory=error_factory))
+    return sink, client
 
 
 # ------------------------------------------------------------------ #
 #  主模型失败（无备用）
 # ------------------------------------------------------------------ #
-def test_primary_only_failure_is_attributable(no_fallback, monkeypatch) -> None:
-    client = _primary_only_client(monkeypatch)
+def test_primary_only_failure_is_attributable(make_llm_client) -> None:
+    _sink, client = _primary_only_client(make_llm_client)
     with pytest.raises(AllModelsFailedError) as excinfo:
         client.generate(PROMPT)
 
@@ -86,16 +81,16 @@ def test_primary_only_failure_is_attributable(no_fallback, monkeypatch) -> None:
     assert err.retryable is True
 
 
-def test_error_chain_is_preserved(no_fallback, monkeypatch) -> None:
+def test_error_chain_is_preserved(make_llm_client) -> None:
     """底层原始异常必须能被追踪到（历史实现曾用 `raise ... from None` 抹掉）"""
-    client = _primary_only_client(monkeypatch)
+    _sink, client = _primary_only_client(make_llm_client)
     with pytest.raises(AllModelsFailedError) as excinfo:
         client.generate(PROMPT)
     assert isinstance(excinfo.value.__cause__, TimeoutError)
 
 
-def test_message_carries_provider_detail(no_fallback, monkeypatch) -> None:
-    client = _primary_only_client(monkeypatch)
+def test_message_carries_provider_detail(make_llm_client) -> None:
+    _sink, client = _primary_only_client(make_llm_client)
     with pytest.raises(AllModelsFailedError) as excinfo:
         client.generate(PROMPT)
     text = str(excinfo.value)
@@ -105,8 +100,8 @@ def test_message_carries_provider_detail(no_fallback, monkeypatch) -> None:
 # ------------------------------------------------------------------ #
 #  不可重试错误
 # ------------------------------------------------------------------ #
-def test_non_retryable_failure_is_marked(no_fallback, monkeypatch) -> None:
-    client = _primary_only_client(monkeypatch, error_factory=_AuthError)
+def test_non_retryable_failure_is_marked(make_llm_client) -> None:
+    _sink, client = _primary_only_client(make_llm_client, error_factory=_AuthError)
     with pytest.raises(AllModelsFailedError) as excinfo:
         client.generate(PROMPT)
     err = excinfo.value
@@ -117,18 +112,9 @@ def test_non_retryable_failure_is_marked(no_fallback, monkeypatch) -> None:
 # ------------------------------------------------------------------ #
 #  主备都失败
 # ------------------------------------------------------------------ #
-def test_both_providers_failure_lists_both_errors(monkeypatch) -> None:
-    monkeypatch.setenv("FALLBACK_API_KEY", "fk")
-    monkeypatch.setenv("FALLBACK_BASE_URL", "https://fallback.example/v1")
-    monkeypatch.setattr(client_module.time, "sleep", lambda _s: None)
-
+def test_both_providers_failure_lists_both_errors(make_llm_client) -> None:
     sink: list[dict] = []
-
-    def factory(**kwargs):
-        return _FakeOpenAI(sink, fail_times=99)  # 主、备都永远失败
-
-    monkeypatch.setattr(client_module, "OpenAI", factory)
-    client = client_module.LLMClient()
+    client = make_llm_client(_FakeOpenAI(sink, fail_times=99), fallback_client=_FakeOpenAI(sink, fail_times=99))
     with pytest.raises(AllModelsFailedError) as excinfo:
         client.generate(PROMPT)
 
@@ -140,8 +126,8 @@ def test_both_providers_failure_lists_both_errors(monkeypatch) -> None:
     assert isinstance(err.__cause__, TimeoutError)  # 备用模型的失败是直接起因
 
 
-def test_open_circuit_without_fallback_is_marked(no_fallback, monkeypatch) -> None:
-    client = _primary_only_client(monkeypatch)
+def test_open_circuit_without_fallback_is_marked(make_llm_client) -> None:
+    _sink, client = _primary_only_client(make_llm_client)
     client.circuit_breaker.failure_threshold = 1
     with pytest.raises(AllModelsFailedError):
         client.generate(PROMPT)  # 先把熔断器打开

@@ -59,11 +59,10 @@ def main() -> int:
     import run_local_baseline as judge_lib  # 与判分同一套归一化
 
     from docs_seeker.agent.runner import AgentRunner
-    from docs_seeker.api.deps import get_composite_retriever
+    from docs_seeker.api.deps import get_composite_retriever, get_llm_client
     from docs_seeker.domain.services.generator import Generator
     from docs_seeker.domain.services.query_decomposer import QueryDecomposer
     from docs_seeker.domain.services.rag_pipeline import RAGPipeline
-    from docs_seeker.infra.llm.client import get_llm_client
 
     norm = judge_lib._norm
     keyword_list = case.get("expected_keywords") or []

@@ -1,6 +1,9 @@
 """docs-seeker - 依赖注入（组装点，管理全应用单例）"""
 
+from langfuse.openai import OpenAI
+
 from docs_seeker.agent.runner import AgentRunner
+from docs_seeker.core.config import settings
 from docs_seeker.domain.services.chat_service import ChatService
 from docs_seeker.domain.services.generator import Generator
 from docs_seeker.domain.services.guards import get_guard_chain
@@ -9,7 +12,8 @@ from docs_seeker.domain.services.top_warmup import TopQuestionWarmup
 from docs_seeker.domain.services.usage import UsageTracker
 from docs_seeker.infra.cache.redis_lock import get_distributed_lock
 from docs_seeker.infra.cache.semantic_cache import get_semantic_cache
-from docs_seeker.infra.llm.client import get_llm_client
+from docs_seeker.infra.llm.client import LLMClient, build_transport_middlewares
+from docs_seeker.infra.llm.middleware import CircuitBreaker
 from docs_seeker.infra.retrieval.composite_retriever import CompositeRetriever
 from docs_seeker.infra.retrieval.hybrid_router import HybridRouter
 from docs_seeker.infra.usage import get_usage_store
@@ -22,6 +26,44 @@ _chat_service: ChatService | None = None
 _agent_runner: AgentRunner | None = None
 _usage_tracker: UsageTracker | None = None
 _top_warmup: TopQuestionWarmup | None = None
+_llm_client: LLMClient | None = None
+
+
+def build_llm_client() -> LLMClient:
+    """组装 LLM 客户端 —— **全应用唯一的「读配置 + 初始化 client」点**。
+
+    ``LLMClient`` 自身不读 ``settings``、不构造 SDK；这里把配置读出来、把 SDK 客户端
+    与 middleware 链建好，再显式注入（构造参数无默认值，漏配即报错）。
+    """
+    primary_client = OpenAI(api_key=settings.deepseek_api_key, base_url=settings.deepseek_base_url)
+    fallback_client = None
+    if settings.fallback_api_key and settings.fallback_base_url:
+        fallback_client = OpenAI(api_key=settings.fallback_api_key, base_url=settings.fallback_base_url)
+    breaker = CircuitBreaker(
+        failure_threshold=settings.llm_circuit_failure_threshold,
+        recovery_timeout=settings.llm_circuit_recovery_seconds,
+    )
+    return LLMClient(
+        primary_client=primary_client,
+        primary_model=settings.llm_model,
+        fallback_client=fallback_client,
+        fallback_model=settings.fallback_model,
+        circuit_breaker=breaker,
+        default_timeout=settings.llm_timeout_seconds,
+        middlewares=build_transport_middlewares(
+            guard_chain=get_guard_chain(),
+            breaker=breaker,
+            has_fallback=lambda: fallback_client is not None,
+            names=settings.llm_transport_middlewares,
+        ),
+    )
+
+
+def get_llm_client() -> LLMClient:
+    global _llm_client
+    if _llm_client is None:
+        _llm_client = build_llm_client()
+    return _llm_client
 
 
 def get_composite_retriever() -> CompositeRetriever:

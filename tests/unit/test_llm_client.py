@@ -2,17 +2,17 @@
 
 背景：客户端原先硬编码 `timeout=15`（普通模型口径），推理模型的响应时间随题目
 波动（实测 10~60s），长答案会被直接打成超时失败 → 超时必须配置化且默认够大。
+
+重构后客户端不再自读配置：默认超时由组装点（``api/deps.py``）从 settings 注入，
+本文件用 ``make_llm_client`` 夹具注入假 SDK 验证口径。
 """
 
 from __future__ import annotations
 
 from types import SimpleNamespace
 
-import pytest
-
 from docs_seeker.core.config import settings
 from docs_seeker.domain.models.llm import LLMRequest
-from docs_seeker.infra.llm import client as client_module
 
 
 def _response(content: str, finish: str = "stop"):
@@ -37,29 +37,18 @@ class _FakeOpenAI:
         self.chat = SimpleNamespace(completions=_Completions())
 
 
-@pytest.fixture
-def patch_client(monkeypatch):
+def test_client_uses_configured_timeout(make_llm_client) -> None:
     sink: list[dict] = []
-
-    def _install(fail_times: int = 0):
-        monkeypatch.setattr(client_module, "OpenAI", lambda **kwargs: _FakeOpenAI(sink, fail_times))
-        return sink
-
-    return _install
-
-
-def test_client_uses_configured_timeout(patch_client) -> None:
-    sink = patch_client()
-    client = client_module.LLMClient()
+    client = make_llm_client(_FakeOpenAI(sink))
     client.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], max_tokens=100))
     assert sink[0]["timeout"] == settings.llm_timeout_seconds
     assert settings.llm_timeout_seconds >= 60  # 推理模型兜底：不得回落到 15s 这类短超时
 
 
-def test_client_timeout_override_wins(patch_client) -> None:
-    """判断类调用传短超时：覆盖全局 120s，避免 agent 循环被卡死"""
-    sink = patch_client()
-    client = client_module.LLMClient()
+def test_client_timeout_override_wins(make_llm_client) -> None:
+    """判断类调用传短超时：覆盖全局默认，避免 agent 循环被卡死"""
+    sink: list[dict] = []
+    client = make_llm_client(_FakeOpenAI(sink))
     client.generate(
         LLMRequest(
             messages=[{"role": "user", "content": "x"}], max_tokens=100, timeout=settings.llm_judge_timeout_seconds
@@ -68,10 +57,17 @@ def test_client_timeout_override_wins(patch_client) -> None:
     assert sink[0]["timeout"] == settings.llm_judge_timeout_seconds
 
 
-def test_client_retries_then_succeeds(patch_client, monkeypatch) -> None:
-    sink = patch_client(fail_times=1)
-    monkeypatch.setattr(client_module.time, "sleep", lambda _s: None)  # 跳过退避等待
-    client = client_module.LLMClient()
+def test_client_retries_then_succeeds(make_llm_client) -> None:
+    sink: list[dict] = []
+    client = make_llm_client(_FakeOpenAI(sink, fail_times=1))
     client.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], max_tokens=100))
     assert len(sink) == 2  # 首次超时 → 重试一次成功
     assert all(call["timeout"] == settings.llm_timeout_seconds for call in sink)
+
+
+def test_explicit_timeout_is_injected_by_composition_root(make_llm_client) -> None:
+    """默认超时是构造参数（不是客户端读 settings）：显式注入即生效"""
+    sink: list[dict] = []
+    client = make_llm_client(_FakeOpenAI(sink), default_timeout=7.5)
+    client.generate(LLMRequest(messages=[{"role": "user", "content": "x"}], max_tokens=100))
+    assert sink[0]["timeout"] == 7.5
