@@ -1,5 +1,6 @@
 """安全护栏单元测试（纯逻辑，无外部依赖）"""
-from docs_seeker.core.security import check_injection, desensitize, sanitize_output
+
+from docs_seeker.infra.guards.security import check_injection, desensitize, sanitize_output
 
 
 class TestCheckInjection:

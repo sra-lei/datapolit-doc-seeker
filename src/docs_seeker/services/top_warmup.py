@@ -17,9 +17,9 @@ import threading
 from loguru import logger
 
 from docs_seeker.config.settings import settings
+from docs_seeker.infra.guards import ANSWER_CTX
 from docs_seeker.interfaces.lock import DistributedLock
 from docs_seeker.services.chat_service import CACHE_FIELDS, ChatService
-from docs_seeker.services.guards import ANSWER_CTX
 from docs_seeker.services.usage import UsageTracker
 
 _LOCK_KEY = "rag:warmup:lock"

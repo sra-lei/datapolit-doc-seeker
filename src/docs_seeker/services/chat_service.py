@@ -6,11 +6,11 @@ from langfuse import get_client, observe, propagate_attributes
 from loguru import logger
 
 from docs_seeker.config.settings import settings
+from docs_seeker.infra.guards import ANSWER_CTX, DOCUMENT_CTX, USER_INPUT_CTX, GuardChain, get_guard_chain
 from docs_seeker.infra.tracker.langfuse import FEATURE_TAG, TRACE_NAME
 from docs_seeker.interfaces.cache import SemanticCachePort
 from docs_seeker.interfaces.retriever import Retriever
 from docs_seeker.services.generator import Generator, compute_confidence
-from docs_seeker.services.guards import ANSWER_CTX, DOCUMENT_CTX, USER_INPUT_CTX, GuardChain, get_guard_chain
 from docs_seeker.services.query_decomposer import QueryDecomposer
 from docs_seeker.services.rag_pipeline import RAGPipeline
 from docs_seeker.services.usage import UsageTracker
