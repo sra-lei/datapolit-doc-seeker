@@ -6,11 +6,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from docs_seeker.api.deps import get_composite_retriever, get_top_warmup
+from docs_seeker.api.deps import get_composite_retriever, get_top_warmup, get_usage_tracker
 from docs_seeker.api.middleware import RequestLoggingMiddleware
 from docs_seeker.api.routes import router
 from docs_seeker.config.settings import settings
-from docs_seeker.core.metrics import metrics_response
 from docs_seeker.infra.logger import setup_logging
 from docs_seeker.infra.tracker import shutdown_langfuse
 
@@ -51,10 +50,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
 )
-app.add_middleware(RequestLoggingMiddleware)
+
+tracker = get_usage_tracker()
+app.add_middleware(RequestLoggingMiddleware, tracker=tracker)
 app.include_router(router)
-
-
-@app.get("/metrics")
-async def metrics():
-    return metrics_response()

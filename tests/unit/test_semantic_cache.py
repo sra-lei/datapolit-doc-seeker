@@ -7,7 +7,7 @@
 from unittest.mock import patch
 
 from docs_seeker.config.settings import settings
-from docs_seeker.infra.cache.semantic_cache import SemanticCache
+from docs_seeker.services.semantic_cache import SemanticCache
 
 
 class FakeDoc:

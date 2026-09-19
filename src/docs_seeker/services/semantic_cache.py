@@ -9,15 +9,18 @@ from array import array
 
 from langfuse import get_client, observe
 from loguru import logger
+from prometheus_client import Counter
 
 from docs_seeker.config.settings import settings
-from docs_seeker.core.metrics import cache_hits_total, cache_misses_total
 from docs_seeker.infra.cache.redis_client import get_redis_client
 from docs_seeker.infra.embedding.embedder import get_embedder
 from docs_seeker.interfaces.cache import SemanticCachePort
 
 _INDEX_NAME = "qa_cache_idx"
 
+# 语义缓存指标（由 infra/cache/semantic_cache.py 采集）
+cache_hits_total = Counter("docs_seeker_cache_hits_total", "语义缓存命中次数")
+cache_misses_total = Counter("docs_seeker_cache_misses_total", "语义缓存未命中次数")
 
 class SemanticCache(SemanticCachePort):
     """基于 Redis Stack 向量搜索的语义缓存
