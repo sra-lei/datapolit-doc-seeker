@@ -323,10 +323,10 @@ class ChatService:
                     "agent_sufficient": None,
                 }
 
-                parts: list[str] = []
+                stream_parts: list[str] = []
                 try:
                     for delta in self.pipeline.generator.generate_stream(question, chunks, history):
-                        parts.append(delta)
+                        stream_parts.append(delta)
                         yield {"type": "delta", "content": delta}
                 except Exception as e:
                     logger.error(f"流式生成失败: {e}")
@@ -334,13 +334,17 @@ class ChatService:
                     yield {"type": "error", "message": f"答案生成失败: {e}"}
                     return
 
-                answer = self.guards.inspect("".join(parts), ANSWER_CTX).text
+                answer = self.guards.inspect("".join(stream_parts), ANSWER_CTX).text
                 confidence = compute_confidence(answer, chunks)
 
             if use_cache and answer.strip():
                 # 同 chat()：空答案不写缓存，避免污染后续命中
                 self.cache.store(question, {"answer": answer, "confidence": confidence, "sources": source_dicts})
 
+            logger.info(
+                f"流式问答完成: len={len(answer)}字 confidence={confidence} "
+                f"cached=False sources={len(source_dicts)} agent={agent_steps is not None}"
+            )
             langfuse.update_current_span(
                 output={"answer": answer, "confidence": confidence, "cached": False, "sources": len(source_dicts)}
             )

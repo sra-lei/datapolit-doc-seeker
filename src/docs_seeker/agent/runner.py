@@ -13,6 +13,7 @@ import json
 import re
 import time
 
+from langfuse import get_client, observe
 from loguru import logger
 
 from docs_seeker.agent.adapter import parse_llm_response
@@ -27,6 +28,18 @@ from docs_seeker.services.generator import compute_confidence
 
 VALID_ACTIONS = ("retrieve", "lookup_article", "final")
 MAX_PARSE_ERRORS = 2
+
+# Langfuse 观测名：agent 循环 = 一个 span（自动成为 chat-response trace 的子观测），
+# 稳定、低基数；每步 LLM 调用由 langfuse.openai wrapper 自动记为 generation。
+AGENT_TRACE_NAME = "agent-run"
+
+
+def _usage_tokens(usage: dict | None) -> str:
+    """token 计数摘要（usage 缺失时显示 ?）"""
+    if not usage:
+        return "?"
+    total = usage.get("total_tokens")
+    return str(total) if total is not None else "?"
 
 
 class AgentError(Exception):
@@ -71,7 +84,9 @@ class AgentRunner:
             raise ValueError("必须提供 retriever 或 tools")
 
     # ---- 对外入口 ----
+    @observe(name=AGENT_TRACE_NAME, capture_input=False, capture_output=False)
     def run(self, question: str, top_k: int = 10) -> AgentResult:
+        run_t0 = time.time()
         max_steps = settings.agent_max_steps
         messages: list[dict] = [
             {
@@ -83,6 +98,11 @@ class AgentRunner:
         steps: list[AgentStep] = []
         evidence: dict[str, Chunk] = {}
         parse_errors = 0
+
+        # Langfuse：agent 循环 span 记录输入问题与预算（不捕获函数全部参数）
+        langfuse = get_client()
+        langfuse.update_current_span(input={"question": question, "top_k": top_k, "max_steps": max_steps})
+        logger.info(f"[agent] 开始: question={question[:60]!r} max_steps={max_steps} top_k={top_k}")
 
         for idx in range(1, max_steps + 1):
             t0 = time.time()
@@ -99,6 +119,7 @@ class AgentRunner:
                     meta={"budget_guard": True},
                 )
             )
+            llm_ms = resp.latency_ms
             raw = parse_llm_response(resp).content
             messages.append({"role": "assistant", "content": raw})
 
@@ -112,6 +133,10 @@ class AgentRunner:
                 if not isinstance(action_input, dict):
                     raise ValueError("action_input 必须是对象")
                 parse_errors = 0
+                logger.info(
+                    f"[agent] 第 {idx} 步 LLM 决策: {llm_ms}ms tokens={_usage_tokens(resp.usage)} "
+                    f"model={resp.model} fallback={resp.fallback_used} action={action!r}"
+                )
             except (ValueError, json.JSONDecodeError) as e:
                 parse_errors += 1
                 step = AgentStep(
@@ -123,7 +148,10 @@ class AgentRunner:
                     elapsed_ms=int((time.time() - t0) * 1000),
                 )
                 steps.append(step)
-                logger.warning(f"[agent] 第 {idx} 步动作解析失败（{parse_errors}/{MAX_PARSE_ERRORS}）: {e}")
+                logger.warning(
+                    f"[agent] 第 {idx} 步动作解析失败（{parse_errors}/{MAX_PARSE_ERRORS}）: {e} "
+                    f"[LLM {llm_ms}ms tokens={_usage_tokens(resp.usage)}]"
+                )
                 if parse_errors >= MAX_PARSE_ERRORS:
                     raise AgentError(f"动作连续 {parse_errors} 次无法解析: {e}") from e
                 messages.append(
@@ -147,6 +175,20 @@ class AgentRunner:
                 )
                 steps.append(step)
                 answer, abstained = self._compose(question, list(evidence.values()), claimed_sufficient, reason)
+                logger.info(
+                    f"[agent] 第 {idx} 步 final: 总耗时={(time.time() - run_t0) * 1000:.0f}ms "
+                    f"steps={len(steps)} evidence={len(evidence)} 拒答={abstained}"
+                )
+                langfuse.update_current_span(
+                    output={
+                        "answer": answer,
+                        "confidence": compute_confidence(answer, list(evidence.values())),
+                        "steps": len(steps),
+                        "evidence": len(evidence),
+                        "sufficient": not abstained,
+                        "elapsed_ms": int((time.time() - run_t0) * 1000),
+                    }
+                )
                 return AgentResult(
                     answer=answer,
                     confidence=compute_confidence(answer, list(evidence.values())),
@@ -169,7 +211,9 @@ class AgentRunner:
                 step.error = "缺少 query 参数"
                 messages.append({"role": "user", "content": "工具调用缺少 query 参数，请重新输出动作 JSON。"})
             else:
+                tool_t0 = time.time()
                 output = self.tools[action].run(query, top_k=top_k)
+                tool_ms = int((time.time() - tool_t0) * 1000)
                 for c in output.chunks:
                     evidence.setdefault(_chunk_key(c), c)
                 step.observation = output.observation
@@ -180,7 +224,8 @@ class AgentRunner:
                 )
                 logger.info(
                     f"[agent] 第 {idx} 步 {action} query={query[:40]!r} "
-                    f"hits={len(output.chunks)} evidence={len(evidence)} remain={remaining}"
+                    f"hits={len(output.chunks)} evidence={len(evidence)} remain={remaining} "
+                    f"tool={tool_ms}ms"
                 )
                 messages.append({"role": "user", "content": output.observation + hint})
             steps.append(step)
@@ -198,6 +243,21 @@ class AgentRunner:
             )
         )
         answer, abstained = self._compose(question, list(evidence.values()), sufficient, reason)
+        logger.info(
+            f"[agent] 预算收尾成文: 总耗时={(time.time() - run_t0) * 1000:.0f}ms "
+            f"steps={len(steps)} evidence={len(evidence)} 拒答={abstained}"
+        )
+        langfuse.update_current_span(
+            output={
+                "answer": answer,
+                "confidence": compute_confidence(answer, list(evidence.values())),
+                "steps": len(steps),
+                "evidence": len(evidence),
+                "sufficient": not abstained,
+                "budget_forced": True,
+                "elapsed_ms": int((time.time() - run_t0) * 1000),
+            }
+        )
         return AgentResult(
             answer=answer,
             confidence=compute_confidence(answer, list(evidence.values())),
@@ -213,6 +273,7 @@ class AgentRunner:
         claimed_sufficient=False 时走「先核实再决定」提示：资料里其实有答案
         就正常作答（防决策代理 false abstain），确实没有才输出 ABSTAIN: 前缀。
         """
+        t0 = time.time()
         evidence_text = self._format_evidence(evidence)
         if claimed_sufficient:
             prompt = COMPOSE_PROMPT.format(question=question, evidence=evidence_text)
@@ -233,10 +294,20 @@ class AgentRunner:
             )
         )
         answer = parse_llm_response(resp).content.strip()
+        compose_ms = int((time.time() - t0) * 1000)
         if claimed_sufficient or not answer.startswith("ABSTAIN:"):
+            logger.info(
+                f"[agent] 成文: {compose_ms}ms tokens={_usage_tokens(resp.usage)} "
+                f"model={resp.model} 答案={len(answer)}字 拒答=False"
+            )
             return answer, False
         # 真正拒答：去掉协议前缀，交给上游（仍保留拒答措辞与 marker）
-        return answer[len("ABSTAIN:") :].strip() or "现有资料中未找到该问题的答案。", True
+        answer = answer[len("ABSTAIN:") :].strip() or "现有资料中未找到该问题的答案。"
+        logger.info(
+            f"[agent] 成文: {compose_ms}ms tokens={_usage_tokens(resp.usage)} "
+            f"model={resp.model} 答案={len(answer)}字 拒答=True"
+        )
+        return answer, True
 
     @staticmethod
     def _format_evidence(evidence: list[Chunk]) -> str:

@@ -1,5 +1,7 @@
 """docs-seeker - 答案生成器（应用服务）"""
 
+import time
+
 from loguru import logger
 
 from docs_seeker.config.settings import prompts, settings
@@ -59,6 +61,7 @@ class Generator:
 
         降级（``fallback_used``）不再静默：这里记 warning，便于评估归因。
         """
+        t0 = time.time()
         response = self.llm.generate(
             LLMRequest(
                 messages=messages,
@@ -70,6 +73,13 @@ class Generator:
                 timeout=timeout,
                 meta={"budget_guard": True} if budget_guard else {},
             )
+        )
+        elapsed_ms = response.latency_ms or int((time.time() - t0) * 1000)
+        tokens = (response.usage or {}).get("total_tokens")
+        logger.info(
+            f"LLM 调用: name={name} {elapsed_ms}ms tokens={tokens if tokens is not None else '?'} "
+            f"model={response.model} finish={response.finish_reason} fallback={response.fallback_used} "
+            f"text={len(response.text)}字"
         )
         if response.fallback_used:
             logger.warning(f"本次调用走了降级模型（name={name}, provider={response.provider}）")
@@ -112,13 +122,17 @@ class Generator:
         """
         messages = self._build_messages(question, docs, conversation_history)
         try:
+            t0 = time.time()
             if max_tokens is not None:
                 response = self._call(messages, max_tokens, timeout=timeout)
                 answer = response.text
             else:
                 answer = self._call_with_budget_guard(messages, timeout=timeout)
             confidence = compute_confidence(answer, docs)
-            logger.info(f"答案生成: confidence={confidence} docs={len(docs)} len={len(answer)}")
+            logger.info(
+                f"答案生成完成: 总耗时={(time.time() - t0) * 1000:.0f}ms "
+                f"confidence={confidence} docs={len(docs)} len={len(answer)}"
+            )
             return answer, confidence
         except Exception as e:
             logger.error(f"答案生成失败: {e}")
@@ -133,16 +147,25 @@ class Generator:
         可能整段为空 —— 此时记 warning，避免再次静默退化。
         """
         messages = self._build_messages(question, docs, conversation_history)
+        t0 = time.time()
         response = self._call(messages, settings.llm_generate_max_tokens, stream=True)
         produced = False
+        parts: list[str] = []
         for delta in response.iter_text():
             produced = True
+            parts.append(delta)
             yield delta
         if not produced:
             logger.warning(
                 f"流式生成正文为空（max_tokens={settings.llm_generate_max_tokens}）"
                 "——疑似 reasoning 吃满预算，检查 LLM_GENERATE_MAX_TOKENS"
             )
+        tokens = (response.usage or {}).get("total_tokens")
+        logger.info(
+            f"流式生成完成: {(time.time() - t0) * 1000:.0f}ms tokens={tokens if tokens is not None else '?'} "
+            f"model={response.model} finish={response.finish_reason} fallback={response.fallback_used} "
+            f"len={len(''.join(parts))}字"
+        )
 
 
 def compute_confidence(answer: str, docs: list[Chunk]) -> str:
