@@ -3,15 +3,21 @@
 mock 三路检索器与检索配置，不依赖 Milvus / Redis / LLM。
 """
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from docs_seeker.infra.retrieval.composite_retriever import CompositeRetriever
 from docs_seeker.models.chunk import Chunk
 
-_CFG = {
-    "rrf": {"k": 60, "weights": {"dense": 0.5, "bm25": 0.3, "summary": 0.2}},
-    "composite": {"fetch_factor": 3, "max_fetch": 30},
-}
+# 与旧 retrieval.yaml 默认值一致的假 settings（测试不依赖外部 .env）
+_RETRIEVAL_SETTINGS = SimpleNamespace(
+    retrieval_rrf_k=60,
+    retrieval_rrf_weight_dense=0.5,
+    retrieval_rrf_weight_bm25=0.3,
+    retrieval_rrf_weight_summary=0.2,
+    retrieval_fetch_factor=3,
+    retrieval_max_fetch=30,
+)
 
 
 class FakeRetriever:
@@ -33,7 +39,7 @@ def _composite(dense=None, bm25=None, summary=None) -> CompositeRetriever:
         patch("docs_seeker.infra.retrieval.composite_retriever.DenseRetriever", FakeRetriever),
         patch("docs_seeker.infra.retrieval.composite_retriever.BM25Retriever", FakeRetriever),
         patch("docs_seeker.infra.retrieval.composite_retriever.SummaryRetriever", FakeRetriever),
-        patch("docs_seeker.infra.retrieval.composite_retriever.retrieval_config", _CFG),
+        patch("docs_seeker.infra.retrieval.composite_retriever.settings", _RETRIEVAL_SETTINGS),
     ):
         comp = CompositeRetriever()
     comp.dense = FakeRetriever(dense or [])

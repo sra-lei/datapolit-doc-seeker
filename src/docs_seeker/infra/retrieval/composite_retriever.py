@@ -8,15 +8,13 @@ from typing import Any
 from langfuse import get_client, observe
 from loguru import logger
 
-from docs_seeker.config.settings import retrieval_config
+from docs_seeker.config.settings import settings
 from docs_seeker.infra.retrieval.bm25_retriever import BM25Retriever
 from docs_seeker.infra.retrieval.dense_retriever import DenseRetriever
 from docs_seeker.infra.retrieval.metadata_filter import build_milvus_expr
 from docs_seeker.infra.retrieval.summary_retriever import SummaryRetriever
 from docs_seeker.interfaces.retriever import Retriever
 from docs_seeker.models.chunk import Chunk
-
-_DEFAULT_WEIGHTS = {"dense": 0.5, "bm25": 0.3, "summary": 0.2}
 
 
 class CompositeRetriever(Retriever):
@@ -27,13 +25,15 @@ class CompositeRetriever(Retriever):
         self.bm25 = BM25Retriever()
         self.summary = SummaryRetriever()
 
-        # 从 retrieval.yaml 读取融合参数（缺失时回退默认值）
-        rrf_cfg = retrieval_config.get("rrf", {})
-        self.rrf_k = int(rrf_cfg.get("k", 60))
-        self.weights = rrf_cfg.get("weights", _DEFAULT_WEIGHTS)
-        comp_cfg = retrieval_config.get("composite", {})
-        self.fetch_factor = int(comp_cfg.get("fetch_factor", 3))
-        self.max_fetch = int(comp_cfg.get("max_fetch", 30))
+        # 融合参数走环境变量配置（settings；默认值与旧 retrieval.yaml 一致）
+        self.rrf_k = settings.retrieval_rrf_k
+        self.weights = {
+            "dense": settings.retrieval_rrf_weight_dense,
+            "bm25": settings.retrieval_rrf_weight_bm25,
+            "summary": settings.retrieval_rrf_weight_summary,
+        }
+        self.fetch_factor = settings.retrieval_fetch_factor
+        self.max_fetch = settings.retrieval_max_fetch
 
     @observe(name="retrieve-multi-route", as_type="retriever", capture_input=False, capture_output=False)
     def search(

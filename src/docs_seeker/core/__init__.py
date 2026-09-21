@@ -1,5 +1,5 @@
-"""docs-seeker - 核心模块（配置 / 日志 / 指标 / 安全护栏）"""
+"""docs-seeker - 核心模块（配置 / prompts 资源）"""
 
-from docs_seeker.config.settings import prompts, retrieval_config, settings
+from docs_seeker.config.settings import prompts, settings
 
-__all__ = ["settings", "prompts", "retrieval_config"]
+__all__ = ["settings", "prompts"]

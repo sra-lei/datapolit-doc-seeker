@@ -1,6 +1,6 @@
 """
-docs-seeker - 核心配置（pydantic-settings 环境变量 + yaml 资源加载）
-所有配置通过环境变量读取，禁止硬编码；prompts/retrieval 从同目录 yaml 加载。
+docs-seeker - 核心配置（pydantic-settings 环境变量 + prompt yaml 资源）
+所有配置通过环境变量读取，禁止硬编码；prompt 模板从同目录 prompts.yaml 加载。
 """
 
 from pathlib import Path
@@ -115,6 +115,15 @@ class Settings(BaseSettings):
     # 而不是被旧管线的成功悄悄掩盖（否则 agentic 的 A/B 根本归因不了）。
     agent_fallback_enabled: bool | None = None
 
+    # ---- 多路检索融合（RRF；原 core/retrieval.yaml，2026-09-21 收归环境变量）----
+    retrieval_rrf_k: int = 60
+    retrieval_rrf_weight_dense: float = 0.5
+    retrieval_rrf_weight_bm25: float = 0.3
+    retrieval_rrf_weight_summary: float = 0.2
+    # 融合前单路召回量 = min(top_k × factor, max_fetch)
+    retrieval_fetch_factor: int = 3
+    retrieval_max_fetch: int = 30
+
     @property
     def agent_fallback_to_pipeline(self) -> bool:
         """解析后的「是否回退旧管线」（显式配置优先，否则按 environment 推导）"""
@@ -143,7 +152,4 @@ def _load_yaml(name: str) -> dict:
 # Prompt 模板（generator/query_decomposer 等使用）
 prompts = _load_yaml("prompts.yaml")
 
-# 检索策略配置（RRF 权重/k、单路召回参数等）
-retrieval_config = _load_yaml("retrieval.yaml")
-
-__all__ = ["settings", "prompts", "retrieval_config"]
+__all__ = ["settings", "prompts"]
