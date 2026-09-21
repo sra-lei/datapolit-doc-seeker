@@ -102,8 +102,8 @@ class FakeEmbedder:
 
 def _patch(cache_enabled=True, index=None):
     fake_redis = FakeRedis(index=index)
-    p_redis = patch("docs_seeker.infra.cache.semantic_cache.get_redis_client", return_value=fake_redis)
-    p_embedder = patch("docs_seeker.infra.cache.semantic_cache.get_embedder", return_value=FakeEmbedder())
+    p_redis = patch("docs_seeker.services.semantic_cache.get_redis_client", return_value=fake_redis)
+    p_embedder = patch("docs_seeker.services.semantic_cache.get_embedder", return_value=FakeEmbedder())
     p_enabled = patch.object(settings, "semantic_cache_enabled", cache_enabled)
     return fake_redis, p_redis, p_embedder, p_enabled
 
@@ -190,7 +190,7 @@ def test_read_index_dim_supports_flat_list_attributes():
             return _InfoIndex()
 
     with (
-        patch("docs_seeker.infra.cache.semantic_cache.get_redis_client", return_value=_InfoRedis()),
+        patch("docs_seeker.services.semantic_cache.get_redis_client", return_value=_InfoRedis()),
         patch.object(settings, "semantic_cache_enabled", True),  # 用例自带环境，不依赖外部 .env
     ):
         cache = SemanticCache()

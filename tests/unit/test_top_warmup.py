@@ -4,7 +4,7 @@
 异常路径下的锁释放。直接调 ``warmup_once()``，不起后台线程。
 """
 
-from docs_seeker.infra.guards import GuardVerdict
+from docs_seeker.infra.llm.middleware.guards import GuardVerdict
 from docs_seeker.models.chunk import Chunk
 from docs_seeker.services.top_warmup import TopQuestionWarmup
 

@@ -180,7 +180,7 @@ def test_unknown_middleware_name_is_ignored(make_llm_client) -> None:
 
 def test_build_transport_middlewares_is_pure(make_llm_client) -> None:
     """组装函数不读 settings：全部依赖由入参决定（配置读取在组装点）"""
-    from docs_seeker.infra.guards import get_guard_chain
+    from docs_seeker.infra.llm.middleware.guards import get_guard_chain
     from docs_seeker.infra.llm.middleware import CircuitBreaker
 
     breaker = CircuitBreaker(failure_threshold=3)

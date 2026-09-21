@@ -240,7 +240,7 @@ pre-commit run --all-files
 | 抽象接口 | `domain/interfaces/`                               | `interfaces/`（顶层）                                | 依赖倒置契约与实体平铺顶层，`domain/` 包拆分为三个顶层包                           |
 | 检索实现 | `retrieval/` 顶层                                  | `infra/retrieval/`                                   | 检索策略依赖 Milvus/embedding，属基础设施实现                                      |
 | 基础设施 | `infra/`                                           | `infra/`                                             | 命名规范化；`vector_store/` → `database/`；`observability/`、`security/` → `core/` |
-| 护栏     | `core/security.py`、`domain/services/guards/`      | `infra/guards/`（base + builtin + security）         | 护栏链（GuardChain/内置规则）归入基础设施，LLM middleware 适配器也挂在 infra 侧    |
+| 护栏     | `core/security.py`、`domain/services/guards/`      | `infra/llm/middleware/guards/`（base + builtin + security + adapter） | 护栏链（GuardChain/内置规则/模式表/client 适配器）内聚进 LLM middleware 子包    |
 | API 入口 | `docs_seeker/app.py`                               | `docs_seeker/api/main.py`                            | FastAPI 应用实例与中间件归入接口层                                                 |
 | 路由目录 | `api/routes/v1/` 子目录                            | `api/routes/` 拍平 + `router.py` 聚合（`/v1` 前缀）  | 路由按模块组织，版本前缀由聚合处管理                                               |
 | 测试组织 | `tests/*.py` 扁平                                  | `tests/unit/` + `tests/integration/` + `conftest.py` | 单测与集成测试分层                                                                 |

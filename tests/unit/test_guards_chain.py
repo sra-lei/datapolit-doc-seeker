@@ -20,7 +20,7 @@ from types import SimpleNamespace
 import pytest
 from loguru import logger
 
-from docs_seeker.infra.guards import (
+from docs_seeker.infra.llm.middleware.guards import (
     ANSWER_CTX,
     DOCUMENT_CTX,
     LLM_MESSAGES_CTX,

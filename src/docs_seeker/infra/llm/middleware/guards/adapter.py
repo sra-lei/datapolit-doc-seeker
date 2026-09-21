@@ -1,9 +1,8 @@
 """client 内的 guard 插槽：扫描送 provider 的 messages（**仅告警**）。
 
-本类是**守卫的客户端适配器**：把 domain 的 ``GuardChain``（领域安全规则）挂到
-LLM 调用链上（middleware 机制，属 infra）。守卫规则在
-``domain/services/guards``（GuardChain / builtin 模式），这里只负责
-「从 ``LLMRequest`` 提取待扫文本 → 调链 → 放行」。
+本类是**守卫的客户端适配器**：把同包的 ``GuardChain``（护栏规则链）挂到
+LLM 调用链上（middleware 机制）。守卫规则在 ``base.py`` / ``builtin.py`` /
+``security.py``，这里只负责「从 ``LLMRequest`` 提取待扫文本 → 调链 → 放行」。
 
 与 pipeline 边界那处**共用同一份护栏配置**（``get_guard_chain()``），但策略不同：
 
@@ -17,7 +16,7 @@ LLM 调用链上（middleware 机制，属 infra）。守卫规则在
 
 from __future__ import annotations
 
-from docs_seeker.infra.guards.base import LLM_MESSAGES_CTX, GuardChain
+from docs_seeker.infra.llm.middleware.guards.base import LLM_MESSAGES_CTX, GuardChain
 from docs_seeker.infra.llm.middleware.base import CallNext, LLMCallContext
 from docs_seeker.models.llm import LLMRequest, LLMResponse
 
