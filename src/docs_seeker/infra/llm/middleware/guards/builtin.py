@@ -1,9 +1,12 @@
-"""内置护栏：提示注入 / 话题白名单 / 输出脱敏。
+"""内置护栏：模式表 + 护栏实现 + 链路装配。
 
-模式表仍在 ``core/security.py``（本层只负责「按挂载点与作用对象决定拦不拦」）。
+下半部是模式表与纯检测函数（提示注入 / 话题白名单 / 敏感信息脱敏）；上半部
+护栏类按**挂载点与作用对象**决定拦不拦 / 改不改写。
 """
 
 from __future__ import annotations
+
+import re
 
 from loguru import logger
 
@@ -15,7 +18,91 @@ from docs_seeker.infra.llm.middleware.guards.base import (
     GuardContext,
     GuardVerdict,
 )
-from docs_seeker.infra.llm.middleware.guards.security import check_injection_patterns, check_off_topic, desensitize
+
+# ============================ 模式表与检测函数 ============================
+
+INJECTION_PATTERNS = [
+    r"忽略(上述|之前|以上|前面|系统)",
+    r"ignore\s+(the\s+)?(above|previous|all)",
+    r"忘记.*指令",
+    r"forget\s+(the\s+)?instructions",
+    r"你是.*不是.*助手",
+    r"you\s+are\s+(not|no\s+longer)\s+(an?\s+)?assistant",
+    r"扮演.*角色",
+    r"act\s+as\s+(a|an)",
+    r"输出.*系统.*提示",
+    r"(print|output|show|display)\s+(the\s+)?(system\s+)?prompt",
+    r"切换.*模式",
+    r"switch\s+mode",
+    r"忽略.*限制",
+    r"ignore\s+restrictions",
+]
+
+OFF_TOPIC_PATTERNS = [
+    r"(写|生成|编|创作).*(诗|小说|故事|代码|歌词|文章|剧本)",
+    r"(write|generate|create|compose).*(poem|story|code|lyrics|article)",
+    r"(怎么|如何|怎样).*(攻击|破解|入侵|黑入|越狱)",
+    r"(how\s+to|teach\s+me).*(hack|attack|crack|bypass)",
+    r"(翻译|translate)\s",
+]
+
+
+def check_injection_patterns(question: str) -> tuple[bool, str]:
+    """提示注入检测（不含话题白名单）"""
+    question_lower = question.lower()
+    for pattern in INJECTION_PATTERNS:
+        if re.search(pattern, question_lower):
+            return False, "检测到提示注入模式，请求已拒绝"
+    return True, ""
+
+
+def check_off_topic(question: str) -> tuple[bool, str]:
+    """话题白名单检测（是否超出职责范围）"""
+    question_lower = question.lower()
+    for pattern in OFF_TOPIC_PATTERNS:
+        if re.search(pattern, question_lower):
+            return False, "该问题超出了我的职责范围（公司政策查询）"
+    return True, ""
+
+
+def check_injection(question: str) -> tuple[bool, str]:
+    """输入侧综合检测：先提示注入、后话题白名单。
+
+    （保留此组合入口以兼容既有调用方；护栏链路分别用上面两个细分函数。）
+    """
+    ok, reason = check_injection_patterns(question)
+    if not ok:
+        return ok, reason
+    return check_off_topic(question)
+
+
+SENSITIVE_PATTERNS = [
+    (re.compile(r"\b[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]\b"), "身份证号"),
+    (re.compile(r"\b1[3-9]\d{9}\b"), "手机号"),
+    (re.compile(r"\b0\d{2,3}-?\d{7,8}\b"), "电话号"),
+    (re.compile(r"\b[\w.-]+@[\w.-]+\.\w+\b"), "邮箱"),
+    (re.compile(r"(?:月薪|年薪|薪资|工资|底薪)\s*\d{3,7}"), "薪资信息"),
+    (re.compile(r"\b\d{16,19}\b"), "疑似银行卡号"),
+]
+
+
+def desensitize(text: str) -> tuple[str, list]:
+    found = []
+    clean_text = text
+    for pattern, label in SENSITIVE_PATTERNS:
+        matches = pattern.findall(clean_text)
+        if matches:
+            found.append(f"{label} (共{len(matches)}处)")
+            clean_text = pattern.sub("***", clean_text)
+    return clean_text, found
+
+
+def sanitize_output(text: str) -> str:
+    clean_text, _ = desensitize(text)
+    return clean_text
+
+
+# ============================== 内置护栏实现 ==============================
 
 
 class InjectionGuard:

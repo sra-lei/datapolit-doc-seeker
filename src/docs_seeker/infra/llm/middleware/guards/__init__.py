@@ -1,8 +1,8 @@
 """应用级护栏（guard）：可插拔的文本检查 / 改写中间件。
 
-护栏全部内聚在 LLM middleware 子包：协议/链路在 ``base.py``，模式表在
-``security.py``，内置实现在 ``builtin.py``，挂到 transport 链上的客户端
-适配器在 ``adapter.py``（``LLMGuardMiddleware``）。
+护栏全部内聚在 LLM middleware 子包：协议/链路在 ``base.py``，模式表与内置
+实现（含检测函数）在 ``builtin.py``，挂到 transport 链上的客户端适配器在
+``adapter.py``（``LLMGuardMiddleware``）。
 
 两个挂载点共用同一份护栏配置：
 

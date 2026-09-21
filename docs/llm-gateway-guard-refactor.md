@@ -1,6 +1,9 @@
 # LLM Gateway 重构方案（透明传输 + 可插拔 Middleware）
 
 > 状态：**已定稿**（2026-09-17，用户评审通过）。
+> 更新（2026-09-21）：护栏最终内聚在 `infra/llm/middleware/guards/`——
+> `base.py`（协议/链路）、`builtin.py`（模式表 + 检测函数 + 内置护栏）、
+> `adapter.py`（client 适配器）；本文中旧路径表述均指该新位置。
 > 范围：`services/docs-seeker` 的 LLM 调用层（`infra/llm/`、`domain/interfaces/llm.py`）与安全护栏（`core/security.py`、`domain/services/chat_service.py`）。
 >
 > **评审已决（2026-09-17）**：

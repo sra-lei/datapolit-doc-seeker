@@ -1,8 +1,8 @@
 """client 内的 guard 插槽：扫描送 provider 的 messages（**仅告警**）。
 
 本类是**守卫的客户端适配器**：把同包的 ``GuardChain``（护栏规则链）挂到
-LLM 调用链上（middleware 机制）。守卫规则在 ``base.py`` / ``builtin.py`` /
-``security.py``，这里只负责「从 ``LLMRequest`` 提取待扫文本 → 调链 → 放行」。
+LLM 调用链上（middleware 机制）。守卫规则与模式表在 ``base.py`` /
+``builtin.py``，这里只负责「从 ``LLMRequest`` 提取待扫文本 → 调链 → 放行」。
 
 与 pipeline 边界那处**共用同一份护栏配置**（``get_guard_chain()``），但策略不同：
 
