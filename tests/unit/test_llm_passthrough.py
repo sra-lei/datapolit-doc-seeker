@@ -21,7 +21,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from docs_seeker.infra.llm.errors import AllModelsFailedError
+from docs_seeker.llm.errors import AllModelsFailedError
 from docs_seeker.models.llm import LLMRequest, LLMResponse
 
 

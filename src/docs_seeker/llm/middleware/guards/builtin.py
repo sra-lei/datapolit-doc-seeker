@@ -11,7 +11,7 @@ import re
 from loguru import logger
 
 from docs_seeker.config.settings import settings
-from docs_seeker.infra.llm.middleware.guards.base import (
+from docs_seeker.llm.middleware.guards.base import (
     SUBJECT_ANSWER,
     SUBJECT_USER_INPUT,
     GuardChain,

@@ -1,10 +1,10 @@
 # LLM Gateway 重构方案（透明传输 + 可插拔 Middleware）
 
 > 状态：**已定稿**（2026-09-17，用户评审通过）。
-> 更新（2026-09-21）：护栏最终内聚在 `infra/llm/middleware/guards/`——
+> 更新（2026-09-21）：护栏最终内聚在 `llm/middleware/guards/`——
 > `base.py`（协议/链路）、`builtin.py`（模式表 + 检测函数 + 内置护栏）、
 > `adapter.py`（client 适配器）；本文中旧路径表述均指该新位置。
-> 范围：`services/docs-seeker` 的 LLM 调用层（`infra/llm/`、`domain/interfaces/llm.py`）与安全护栏（`core/security.py`、`domain/services/chat_service.py`）。
+> 范围：`services/docs-seeker` 的 LLM 调用层（`llm/`、`domain/interfaces/llm.py`）与安全护栏（`core/security.py`、`domain/services/chat_service.py`）。
 >
 > **评审已决（2026-09-17）**：
 > 1. 先落本方案文档并推送 → 评审通过后再开工（本文即交付物）；
@@ -25,7 +25,7 @@
 
 | # | 位置 | 问题 |
 |---|---|---|
-| P1 | `infra/llm/gateway.py:132-143` | `call_kwargs` 是**硬编码白名单**，只有 `model / messages / max_tokens / temperature / stream / timeout / name` 7 个键。`top_p`、`seed`、`stop`、`response_format`、`tools` / `tool_choice`、`logprobs`、`reasoning_effort`、`extra_body` …… 一个都传不进去。 |
+| P1 | `llm/gateway.py:132-143` | `call_kwargs` 是**硬编码白名单**，只有 `model / messages / max_tokens / temperature / stream / timeout / name` 7 个键。`top_p`、`seed`、`stop`、`response_format`、`tools` / `tool_choice`、`logprobs`、`reasoning_effort`、`extra_body` …… 一个都传不进去。 |
 | P2 | `domain/interfaces/llm.py:9-23` | `LLMRequest` 字段封闭，没有逃生舱。**每加一个参数要改 dataclass + 所有鸭子类型测试替身**（`ScriptedLLM` / `RecordingLLM` / `_ScriptedGenerator`），历史上加一个 `model=` 就红了 7 项用例。 |
 | P3 | `gateway.py:142` | `"name": request.name` 被塞进 `chat.completions.create(**kwargs)` —— 这是 `langfuse.openai` 的封装参数，**框架参数和 provider 参数混在同一个命名空间**，换掉 Langfuse 包装就会 400。 |
 | P4 | `gateway.py:144-147` | `stream_options={"include_usage": True}` 被**无条件注入**且仅流式注入，调用方无法关闭、也无法在非流式下指定。 |
@@ -205,7 +205,7 @@ llm:
 ## 4. 目标目录结构
 
 ```
-infra/llm/
+llm/
   gateway.py          # 只剩：构造 payload → 调 SDK → 包 LLMResponse → 过 middleware 链
   middleware/
     base.py           # LLMMiddleware 协议 + CallContext + 链式执行器
@@ -266,7 +266,7 @@ domain/services/
 ## 8. Phase 0 建议切片
 
 1. `domain/interfaces/llm.py`：`LLMRequest` 加 `extra` / `meta`；新增 `LLMResponse`；`LLMProvider.generate` 返回类型 `Any` → `LLMResponse`。
-2. `infra/llm/gateway.py`：`call_kwargs` 硬编码白名单 → 「常用字段过滤 `None` + `extra` 合并 + `meta` 剥离」；返回包 `LLMResponse`。
+2. `llm/gateway.py`：`call_kwargs` 硬编码白名单 → 「常用字段过滤 `None` + `extra` 合并 + `meta` 剥离」；返回包 `LLMResponse`。
 3. 同步迁移调用点：`Generator` / `QueryDecomposer` / `AgentRunner` / `agent_loop` + 全部鸭子类型替身（`ScriptedLLM` / `RecordingLLM` / `_ScriptedGenerator`）。
 4. 新增单测：`extra` 透传、`None` 不下发、`meta` 不进 payload、`raw` 保真、`fallback_used` 标记。
 
@@ -293,8 +293,8 @@ domain/services/
 
 ### Phase 1（middleware 骨架 + transport 插件化）✅ 2026-09-17
 
-- **新增文件**：`infra/llm/middleware/base.py`（洋葱链 + `LLMCallContext` + `LLMMiddleware` 协议）、`middleware/transport.py`（observability / fallback / circuit_breaker / retry）、`infra/llm/circuit_breaker.py`（熔断器从 gateway 拆出）、`infra/llm/errors.py`。
-  - （2026-09-18 注：`transport.py` 已按 middleware 拆为 `observability.py` / `fallback.py` / `circuit_breaker.py` / `budget_guard.py` / `retry.py`（含 `is_retryable`）五个文件，包 `__init__` 的公共导入面不变；同日熔断器状态机（`CircuitBreaker` / `CircuitBreakerOpenError` / `CircuitState`）也从 `infra/llm/circuit_breaker.py` 内聚进 `middleware/circuit_breaker.py`（与 middleware 同文件），经 middleware 包导出、`client.py` 再导出的公共面不变。下文 Phase 记录中 `middleware/transport.py` / `infra/llm/circuit_breaker.py` 路径均指变动前状态。）
+- **新增文件**：`llm/middleware/base.py`（洋葱链 + `LLMCallContext` + `LLMMiddleware` 协议）、`middleware/transport.py`（observability / fallback / circuit_breaker / retry）、`llm/circuit_breaker.py`（熔断器从 gateway 拆出）、`llm/errors.py`。
+  - （2026-09-18 注：`transport.py` 已按 middleware 拆为 `observability.py` / `fallback.py` / `circuit_breaker.py` / `budget_guard.py` / `retry.py`（含 `is_retryable`）五个文件，包 `__init__` 的公共导入面不变；同日熔断器状态机（`CircuitBreaker` / `CircuitBreakerOpenError` / `CircuitState`）也从 `llm/circuit_breaker.py` 内聚进 `middleware/circuit_breaker.py`（与 middleware 同文件），经 middleware 包导出、`client.py` 再导出的公共面不变。下文 Phase 记录中 `middleware/transport.py` / `llm/circuit_breaker.py` 路径均指变动前状态。）
 - **网关收敛**：`generate()` 只剩「起 ctx → 跑链路 → 盖章到信封」；`_invoke()` = 选 client/模型 → 组 payload → 调 SDK → 包信封。策略零内联。
 - **链路顺序**（外层→内层）：`observability → fallback → circuit_breaker → retry → terminal`
   - `fallback` 在熔断外层：熔断打开时由它接管走备用（与旧行为一致）；
@@ -357,7 +357,7 @@ domain/services/
 
 ### Phase 4（失败可归因：错误模型 + 错误链）✅ 2026-09-17
 
-- `infra/llm/errors.py`：`LLMError` 基类（带 `attempts` / `provider_errors` /
+- `llm/errors.py`：`LLMError` 基类（带 `attempts` / `provider_errors` /
   `fallback_attempted` / `retryable`，`__str__` 自动附 provider 明细）；`AllModelsFailedError`
   继承之 —— 失败不再是一句「都失败了」。
 - `LLMCallContext` 增 `provider_errors`：`RetryMiddleware` 在**最终失败 / 不可重试**时记录

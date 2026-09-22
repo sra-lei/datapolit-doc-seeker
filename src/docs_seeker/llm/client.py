@@ -25,9 +25,9 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from docs_seeker.infra.llm.middleware.guards import GuardChain
-from docs_seeker.infra.llm.errors import AllModelsFailedError, LLMError
-from docs_seeker.infra.llm.middleware import (
+from docs_seeker.llm.middleware.guards import GuardChain
+from docs_seeker.llm.errors import AllModelsFailedError, LLMError
+from docs_seeker.llm.middleware import (
     BudgetGuardMiddleware,
     CircuitBreaker,
     CircuitBreakerMiddleware,

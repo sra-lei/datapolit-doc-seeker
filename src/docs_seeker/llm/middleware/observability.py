@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from docs_seeker.infra.llm.middleware.base import CallNext, LLMCallContext
+from docs_seeker.llm.middleware.base import CallNext, LLMCallContext
 from docs_seeker.models.llm import LLMRequest, LLMResponse
 
 

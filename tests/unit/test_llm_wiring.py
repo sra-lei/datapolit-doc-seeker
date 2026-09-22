@@ -139,7 +139,7 @@ def test_get_llm_client_is_singleton(fake_sdk, monkeypatch) -> None:
 
 def test_llm_client_requires_all_dependencies() -> None:
     """构造参数无默认值：漏传必须直接报错，而不是悄悄用默认值跑起来"""
-    from docs_seeker.infra.llm.client import LLMClient
+    from docs_seeker.llm.client import LLMClient
 
     with pytest.raises(TypeError):
         LLMClient()  # type: ignore[call-arg]

@@ -63,6 +63,7 @@ src/docs_seeker/
 ├── core/                         # metrics.py（跨模块共享的通用代码）
 ├── interfaces/                   # 契约层（依赖倒置）：Retriever / EmbeddingProvider /
 │                                 #   LLMProvider / SemanticCachePort / UsageStore
+├── llm/                          # client.py + middleware/（观测/重试/熔断/降级/护栏/预算）
 ├── models/                       # 实体：Chunk / Document / Query / LLMRequest / LLMResponse
 ├── services/                     # 业务服务：chat_service / generator / rag_pipeline /
 │                                 #   query_decomposer / metadata / top_warmup / usage
@@ -70,7 +71,6 @@ src/docs_seeker/
     ├── database/                 # milvus_client.py（只读）
     ├── cache/                    # redis_client.py + semantic_cache.py
     ├── guards/                   # GuardChain + 内置规则（base / builtin / security）
-    ├── llm/                      # client.py + middleware/（观测/重试/熔断/降级/护栏/预算）
     ├── logger/                   # logging.py（loguru）
     ├── retrieval/                # dense/bm25/summary/composite/metadata_filter/hybrid_router
     ├── tracker/                  # langfuse.py（链路追踪）
@@ -106,7 +106,7 @@ src/docs_seeker/
 遵循 [langfuse/skills](https://github.com/langfuse/skills) 官方 Agent Skill 与[追踪最佳实践](https://langfuse.com/docs/observability/best-practices)实现：
 
 - **接入点**：`infra/tracker/langfuse.py`（环境变量加载 + `tracing_enabled()` / `shutdown_langfuse()`）
-- **LLM 调用**：`infra/llm/gateway.py`、`infra/embedding/embedder.py` 改用 `langfuse.openai.OpenAI` drop-in 包装，自动记录 generation/embedding 观测（模型名、token 用量、耗时、错误）；流式开启 `stream_options.include_usage` 采集 token
+- **LLM 调用**：`llm/gateway.py`、`infra/embedding/embedder.py` 改用 `langfuse.openai.OpenAI` drop-in 包装，自动记录 generation/embedding 观测（模型名、token 用量、耗时、错误）；流式开启 `stream_options.include_usage` 采集 token
 - **流程观测**：`ChatService.chat/chat_stream`（根 trace `chat-response`）、`RAGPipeline.prepare`（`retrieve-context`）、三路检索器与 RRF 融合（`retriever` 类型）、语义缓存查询（`retriever` 类型）
 - **属性**：`session_id`/`user_id`（ChatRequest 新增可选字段）→ propagate_attributes 传播；tags=`chat`；environment 取 `ENVIRONMENT`；metadata 含路由
 - **降级**：未配置 `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` 时客户端自动 no-op，不影响业务；测试环境 `LANGFUSE_TRACING_ENABLED=false`（tests/conftest.py）
@@ -116,7 +116,7 @@ src/docs_seeker/
 
 ## 3. 遗留问题清单
 
-> 路径对应说明：重构后旧路径已迁移 —— `domain/*_retriever.py` → `infra/retrieval/`；`infra/milvus_store.py` → `infra/database/milvus_client.py`；`infra/semantic_cache.py` → `infra/cache/semantic_cache.py`；`infra/llm_gateway.py` → `infra/llm/gateway.py`；`infra/embedder.py` → `infra/embedding/embedder.py`；`infra/guard.py` → `core/security.py`；`infra/usage_tracker.py` → `infra/usage/tracker.py`；`api/routes.py` → `api/routes/*.py`（v1 拍平，前缀保留）；`api/schemas.py` → `api/schemas/{request,response}.py`；`config/config.py` → `core/config.py`；`domain/generator.py` → `domain/services/generator.py`；`application/*` → `domain/services/`
+> 路径对应说明：重构后旧路径已迁移 —— `domain/*_retriever.py` → `infra/retrieval/`；`infra/milvus_store.py` → `infra/database/milvus_client.py`；`infra/semantic_cache.py` → `infra/cache/semantic_cache.py`；`llm_gateway.py` → `llm/gateway.py`；`infra/embedder.py` → `infra/embedding/embedder.py`；`infra/guard.py` → `core/security.py`；`infra/usage_tracker.py` → `infra/usage/tracker.py`；`api/routes.py` → `api/routes/*.py`（v1 拍平，前缀保留）；`api/schemas.py` → `api/schemas/{request,response}.py`；`config/config.py` → `core/config.py`；`domain/generator.py` → `domain/services/generator.py`；`application/*` → `domain/services/`
 
 ### 3.1 🔴 P1 阻断级（装不上 / 启动失败 / 核心功能失效）
 

@@ -23,9 +23,9 @@ from types import SimpleNamespace
 import pytest
 
 from docs_seeker.config.settings import settings
-from docs_seeker.infra.llm.client import build_transport_middlewares
-from docs_seeker.infra.llm.errors import AllModelsFailedError
-from docs_seeker.infra.llm.middleware import CircuitState
+from docs_seeker.llm.client import build_transport_middlewares
+from docs_seeker.llm.errors import AllModelsFailedError
+from docs_seeker.llm.middleware import CircuitState
 from docs_seeker.models.llm import LLMRequest
 
 PROMPT = LLMRequest(messages=[{"role": "user", "content": "x"}])
@@ -165,7 +165,7 @@ def test_chain_can_be_trimmed_by_settings(make_llm_client) -> None:
 
 
 def test_middlewares_can_be_injected_explicitly(make_llm_client) -> None:
-    from docs_seeker.infra.llm.middleware import ObservabilityMiddleware
+    from docs_seeker.llm.middleware import ObservabilityMiddleware
 
     sink: list[dict] = []
     client = make_llm_client(_FakeOpenAI(sink), middlewares=[ObservabilityMiddleware()])
@@ -180,8 +180,8 @@ def test_unknown_middleware_name_is_ignored(make_llm_client) -> None:
 
 def test_build_transport_middlewares_is_pure(make_llm_client) -> None:
     """组装函数不读 settings：全部依赖由入参决定（配置读取在组装点）"""
-    from docs_seeker.infra.llm.middleware.guards import get_guard_chain
-    from docs_seeker.infra.llm.middleware import CircuitBreaker
+    from docs_seeker.llm.middleware.guards import get_guard_chain
+    from docs_seeker.llm.middleware import CircuitBreaker
 
     breaker = CircuitBreaker(failure_threshold=3)
     chain = build_transport_middlewares(

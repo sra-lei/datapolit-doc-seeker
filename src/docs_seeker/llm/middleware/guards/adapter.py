@@ -16,8 +16,8 @@ LLM 调用链上（middleware 机制）。守卫规则与模式表在 ``base.py`
 
 from __future__ import annotations
 
-from docs_seeker.infra.llm.middleware.guards.base import LLM_MESSAGES_CTX, GuardChain
-from docs_seeker.infra.llm.middleware.base import CallNext, LLMCallContext
+from docs_seeker.llm.middleware.guards.base import LLM_MESSAGES_CTX, GuardChain
+from docs_seeker.llm.middleware.base import CallNext, LLMCallContext
 from docs_seeker.models.llm import LLMRequest, LLMResponse
 
 

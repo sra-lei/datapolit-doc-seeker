@@ -12,8 +12,8 @@
   的 messages，**仅告警不短路**，让 agent 循环内的每次 LLM 调用也经过护栏。
 """
 
-from docs_seeker.infra.llm.middleware.guards.adapter import LLMGuardMiddleware
-from docs_seeker.infra.llm.middleware.guards.base import (
+from docs_seeker.llm.middleware.guards.adapter import LLMGuardMiddleware
+from docs_seeker.llm.middleware.guards.base import (
     ANSWER_CTX,
     DOCUMENT_CTX,
     LLM_MESSAGES_CTX,
@@ -29,7 +29,7 @@ from docs_seeker.infra.llm.middleware.guards.base import (
     GuardContext,
     GuardVerdict,
 )
-from docs_seeker.infra.llm.middleware.guards.builtin import (
+from docs_seeker.llm.middleware.guards.builtin import (
     InjectionGuard,
     PIIRedactionGuard,
     TopicPolicyGuard,

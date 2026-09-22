@@ -38,6 +38,20 @@ src/docs_seeker/
 │   ├── llm.py                    # LLM Provider 接口
 │   ├── cache.py                  # 语义缓存接口（SemanticCachePort）
 │   └── usage.py                  # 使用统计存储接口（UsageStore）
+├── llm/                          # LLM 调用层（client + 中间件链）
+│   ├── client.py                 # LLMClient（组 payload + 调 SDK + 包信封）
+│   ├── errors.py                 # 错误类型（AllModelsFailedError 等）
+│   └── middleware/               # 可插拔调用策略（洋葱模型）
+│       ├── base.py               # 协议：CallNext / LLMCallContext / MiddlewareChain
+│       ├── guards/               # 护栏子包（模式表 + GuardChain + client 适配器）
+│       │   ├── base.py           # Guard 协议 / GuardChain / 上下文
+│       │   ├── builtin.py        # 模式表 + InjectionGuard/TopicPolicyGuard/PIIRedactionGuard
+│       │   └── adapter.py        # client 内护栏（扫描送 provider 的 messages）
+│       ├── observability.py      # 观测
+│       ├── retry.py              # 重试
+│       ├── circuit_breaker.py    # 熔断器状态机
+│       ├── fallback.py           # 降级（主→备）
+│       └── budget_guard.py       # token 预算守卫
 ├── models/                       # 领域实体
 │   ├── document.py               # 文档实体
 │   ├── chunk.py                  # 文档块实体
@@ -59,20 +73,6 @@ src/docs_seeker/
     │   └── milvus_client.py      # Milvus 只读客户端
     ├── embedding/                # 向量化实现
     │   └── embedder.py           # 查询向量化（只读）
-    ├── llm/                      # LLM 实现
-    │   ├── client.py             # LLMClient（组 payload + 调 SDK + 包信封）
-    │   ├── errors.py             # 错误类型（AllModelsFailedError 等）
-    │   └── middleware/           # 可插拔调用策略（洋葱模型）
-    │       ├── base.py           # 协议：CallNext / LLMCallContext / MiddlewareChain
-    │       ├── guards/           # 护栏子包（模式表 + GuardChain + client 适配器）
-    │       │   ├── base.py       # Guard 协议 / GuardChain / 上下文
-    │       │   ├── builtin.py    # 模式表 + InjectionGuard/TopicPolicyGuard/PIIRedactionGuard
-    │       │   └── adapter.py    # client 内护栏（扫描送 provider 的 messages）
-    │       ├── observability.py  # 观测
-    │       ├── retry.py          # 重试
-    │       ├── circuit_breaker.py# 熔断器状态机
-    │       ├── fallback.py       # 降级（主→备）
-    │       └── budget_guard.py   # token 预算守卫
     ├── logger/                   # 结构化日志（loguru）
     │   └── logging.py
     ├── retrieval/                # 检索策略实现
@@ -237,7 +237,7 @@ pre-commit run --all-files
 | 抽象接口 | `domain/interfaces/`                               | `interfaces/`（顶层）                                | 依赖倒置契约与实体平铺顶层，`domain/` 包拆分为三个顶层包                           |
 | 检索实现 | `retrieval/` 顶层                                  | `infra/retrieval/`                                   | 检索策略依赖 Milvus/embedding，属基础设施实现                                      |
 | 基础设施 | `infra/`                                           | `infra/`                                             | 命名规范化；`vector_store/` → `database/`；`observability/`、`security/` → `core/` |
-| 护栏     | `core/security.py`、`domain/services/guards/`      | `infra/llm/middleware/guards/`（base + builtin + adapter） | 模式表/检测函数收进 builtin，护栏链与 client 适配器内聚进 LLM middleware 子包    |
+| 护栏     | `core/security.py`、`domain/services/guards/`      | `llm/middleware/guards/`（base + builtin + adapter） | 模式表/检测函数收进 builtin，护栏链与 client 适配器内聚进 LLM middleware 子包    |
 | API 入口 | `docs_seeker/app.py`                               | `docs_seeker/api/main.py`                            | FastAPI 应用实例与中间件归入接口层                                                 |
 | 路由目录 | `api/routes/v1/` 子目录                            | `api/routes/` 拍平 + `router.py` 聚合（`/v1` 前缀）  | 路由按模块组织，版本前缀由聚合处管理                                               |
 | 测试组织 | `tests/*.py` 扁平                                  | `tests/unit/` + `tests/integration/` + `conftest.py` | 单测与集成测试分层                                                                 |

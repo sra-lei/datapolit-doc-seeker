@@ -10,7 +10,7 @@ import time
 
 from loguru import logger
 
-from docs_seeker.infra.llm.middleware.base import CallNext, LLMCallContext
+from docs_seeker.llm.middleware.base import CallNext, LLMCallContext
 from docs_seeker.models.llm import LLMRequest, LLMResponse
 
 # 不可重试的错误类型名（4xx 里除了 429 速率限制，重试多少次都一样）

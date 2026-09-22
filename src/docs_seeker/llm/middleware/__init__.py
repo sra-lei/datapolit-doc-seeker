@@ -6,18 +6,18 @@
 内聚在 ``guards/`` 子包。
 """
 
-from docs_seeker.infra.llm.middleware.base import CallNext, LLMCallContext, LLMMiddleware, MiddlewareChain
-from docs_seeker.infra.llm.middleware.budget_guard import BudgetGuardMiddleware
-from docs_seeker.infra.llm.middleware.circuit_breaker import (
+from docs_seeker.llm.middleware.base import CallNext, LLMCallContext, LLMMiddleware, MiddlewareChain
+from docs_seeker.llm.middleware.budget_guard import BudgetGuardMiddleware
+from docs_seeker.llm.middleware.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerMiddleware,
     CircuitBreakerOpenError,
     CircuitState,
 )
-from docs_seeker.infra.llm.middleware.fallback import FallbackMiddleware
-from docs_seeker.infra.llm.middleware.guards import LLMGuardMiddleware
-from docs_seeker.infra.llm.middleware.observability import ObservabilityMiddleware
-from docs_seeker.infra.llm.middleware.retry import RetryMiddleware, is_retryable
+from docs_seeker.llm.middleware.fallback import FallbackMiddleware
+from docs_seeker.llm.middleware.guards import LLMGuardMiddleware
+from docs_seeker.llm.middleware.observability import ObservabilityMiddleware
+from docs_seeker.llm.middleware.retry import RetryMiddleware, is_retryable
 
 __all__ = [
     "BudgetGuardMiddleware",

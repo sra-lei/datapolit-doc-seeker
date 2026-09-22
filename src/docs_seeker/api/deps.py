@@ -5,9 +5,9 @@ from langfuse.openai import OpenAI
 from docs_seeker.agent.runner import AgentRunner
 from docs_seeker.config.settings import settings
 from docs_seeker.services.semantic_cache import get_semantic_cache
-from docs_seeker.infra.llm.middleware.guards import get_guard_chain
-from docs_seeker.infra.llm.client import LLMClient, build_transport_middlewares
-from docs_seeker.infra.llm.middleware import CircuitBreaker
+from docs_seeker.llm.middleware.guards import get_guard_chain
+from docs_seeker.llm.client import LLMClient, build_transport_middlewares
+from docs_seeker.llm.middleware import CircuitBreaker
 from docs_seeker.infra.retrieval.composite_retriever import CompositeRetriever
 from docs_seeker.infra.retrieval.hybrid_router import HybridRouter
 from docs_seeker.infra.usage import get_usage_store
