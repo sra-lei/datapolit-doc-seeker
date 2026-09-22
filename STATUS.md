@@ -62,13 +62,13 @@ src/docs_seeker/
 ├── config/                       # settings.py（Pydantic Settings + .env）
 ├── core/                         # metrics.py（跨模块共享的通用代码）
 ├── interfaces/                   # 契约层（依赖倒置）：Retriever / EmbeddingProvider /
-│                                 #   LLMProvider / SemanticCachePort / UsageStore / DistributedLock
+│                                 #   LLMProvider / SemanticCachePort / UsageStore
 ├── models/                       # 实体：Chunk / Document / Query / LLMRequest / LLMResponse
 ├── services/                     # 业务服务：chat_service / generator / rag_pipeline /
 │                                 #   query_decomposer / metadata / top_warmup / usage
 └── infra/                        # 基础设施层（外部依赖实现）
     ├── database/                 # milvus_client.py（只读）
-    ├── cache/                    # redis_client.py + redis_lock.py + semantic_cache.py
+    ├── cache/                    # redis_client.py + semantic_cache.py
     ├── guards/                   # GuardChain + 内置规则（base / builtin / security）
     ├── llm/                      # client.py + middleware/（观测/重试/熔断/降级/护栏/预算）
     ├── logger/                   # logging.py（loguru）

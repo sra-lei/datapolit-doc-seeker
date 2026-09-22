@@ -37,8 +37,7 @@ src/docs_seeker/
 │   ├── embedder.py               # 向量化接口
 │   ├── llm.py                    # LLM Provider 接口
 │   ├── cache.py                  # 语义缓存接口（SemanticCachePort）
-│   ├── usage.py                  # 使用统计存储接口（UsageStore）
-│   └── lock.py                   # 分布式锁接口（DistributedLock）
+│   └── usage.py                  # 使用统计存储接口（UsageStore）
 ├── models/                       # 领域实体
 │   ├── document.py               # 文档实体
 │   ├── chunk.py                  # 文档块实体
@@ -55,7 +54,6 @@ src/docs_seeker/
 └── infra/                        # 基础设施层（外部依赖实现）
     ├── cache/                    # 缓存实现
     │   ├── redis_client.py       # Redis 基础客户端
-    │   ├── redis_lock.py         # 分布式锁实现（RedisDistributedLock）
     │   └── semantic_cache.py     # 语义缓存策略
     ├── database/                 # 数据库实现
     │   └── milvus_client.py      # Milvus 只读客户端
@@ -111,7 +109,7 @@ HTTP 层 (api/)
 
 ### 接口隔离（依赖倒置）
 
-- `interfaces/` 定义抽象接口（Retriever / EmbeddingProvider / LLMProvider / SemanticCachePort / UsageStore / DistributedLock）
+- `interfaces/` 定义抽象接口（Retriever / EmbeddingProvider / LLMProvider / SemanticCachePort / UsageStore）
 - `infra/` 实现这些接口（Milvus、Redis、LLM 等）
 - 上层只依赖接口，不依赖具体实现
 - 便于替换组件（如 Milvus → Qdrant、Redis → 内存实现）
