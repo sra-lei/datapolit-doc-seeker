@@ -60,10 +60,9 @@ src/docs_seeker/
 │   └── schemas/                  # request.py / response.py
 ├── agent/                        # Agentic 循环（M1）：runner / agent_loop / tools / adapter
 ├── config/                       # settings.py（Pydantic Settings + .env）
-├── core/                         # metrics.py（跨模块共享的通用代码）
 ├── interfaces/                   # 契约层（依赖倒置）：Retriever / EmbeddingProvider /
 │                                 #   LLMProvider / SemanticCachePort / UsageStore
-├── llm/                          # client.py + middleware/（观测/重试/熔断/降级/护栏/预算）
+├── llm/                          # client.py + prompts.yaml + middleware/（观测/重试/熔断/降级/护栏/预算）
 ├── models/                       # 实体：Chunk / Document / Query / LLMRequest / LLMResponse
 ├── services/                     # 业务服务：chat_service / generator / rag_pipeline /
 │                                 #   query_decomposer / metadata / top_warmup / usage

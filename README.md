@@ -29,18 +29,16 @@ src/docs_seeker/
 │   └── prompts.py                # agent 提示词
 ├── config/                       # 配置
 │   └── settings.py               # Pydantic Settings（环境变量 + .env）
-├── core/                         # 跨模块共享的通用代码
-│   ├── metrics.py                # Prometheus 指标
-│   └── __init__.py
 ├── interfaces/                   # 抽象接口（依赖倒置，核心契约）
 │   ├── retriever.py              # 检索器抽象接口
 │   ├── embedder.py               # 向量化接口
 │   ├── llm.py                    # LLM Provider 接口
 │   ├── cache.py                  # 语义缓存接口（SemanticCachePort）
 │   └── usage.py                  # 使用统计存储接口（UsageStore）
-├── llm/                          # LLM 调用层（client + 中间件链）
+├── llm/                          # LLM 调用层（client + 中间件链 + prompt 资源）
 │   ├── client.py                 # LLMClient（组 payload + 调 SDK + 包信封）
 │   ├── errors.py                 # 错误类型（AllModelsFailedError 等）
+│   ├── prompts.yaml              # Prompt 模板（generator / query_decomposer）
 │   └── middleware/               # 可插拔调用策略（洋葱模型）
 │       ├── base.py               # 协议：CallNext / LLMCallContext / MiddlewareChain
 │       ├── guards/               # 护栏子包（模式表 + GuardChain + client 适配器）

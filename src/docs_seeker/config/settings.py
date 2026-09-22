@@ -1,6 +1,6 @@
 """
 docs-seeker - 核心配置（pydantic-settings 环境变量 + prompt yaml 资源）
-所有配置通过环境变量读取，禁止硬编码；prompt 模板从同目录 prompts.yaml 加载。
+所有配置通过环境变量读取，禁止硬编码；prompt 模板从 llm/prompts.yaml 加载。
 """
 
 from pathlib import Path
@@ -135,11 +135,12 @@ class Settings(BaseSettings):
 settings = Settings()
 
 _CONFIG_DIR = Path(__file__).resolve().parent
+_LLM_DIR = _CONFIG_DIR.parent / "llm"
 
 
 def _load_yaml(name: str) -> dict:
-    """读取 core 目录下的 yaml 配置，缺失/解析失败时返回空 dict"""
-    path = _CONFIG_DIR / name
+    """读取 llm 目录下的 yaml 配置，缺失/解析失败时返回空 dict"""
+    path = _LLM_DIR / name
     if not path.exists():
         return {}
     try:

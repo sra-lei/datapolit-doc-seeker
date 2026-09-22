@@ -37,7 +37,7 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-docs_seeker = ["py.typed", "core/*.yaml"]
+docs_seeker = ["py.typed", "llm/*.yaml"]
 
 [tool.pytest.ini_options]
 # 将 src 加入 pythonpath，确保未执行 pip install -e 时 from docs_seeker.* 也能导入
